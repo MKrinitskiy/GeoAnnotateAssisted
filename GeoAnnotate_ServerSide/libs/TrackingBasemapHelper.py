@@ -2,6 +2,7 @@ import matplotlib
 # matplotlib.use('Qt5Agg')
 # matplotlib.use('TkAgg')
 matplotlib.use('ps')
+from .scaling import *
 
 
 from matplotlib import pyplot as plt
@@ -15,6 +16,7 @@ from libs.ga_defs import *
 import pickle
 import uuid
 import threading
+from .colormaps import *
 
 
 
@@ -108,70 +110,75 @@ class TrackingBasemapHelperClass(object):
                                      'lat': 'latitudes',
                                      'lon': 'longitudes'}
         self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
-        self.channelColormaps = ['jet', self.create_ch5_cmap(), 'spring']
+        # self.channelColormaps = ['jet', create_ch5_cmap(), 'spring']
+        self.channelColormaps = [create_ch9_cmap(),
+                                 create_ch5_cmap(),
+                                 create_btd_cmap()]
+        self.channelVmin = [norm_constants.ch9_vmin, norm_constants.ch5_vmin, norm_constants.btd_vmin]
+        self.channelVmax = [norm_constants.ch9_vmax, norm_constants.ch5_vmax, norm_constants.btd_vmax]
 
 
 
-    def create_ch5_cmap(self):
-        from matplotlib import cm
-        from matplotlib.colors import ListedColormap
-
-        ch5_vmin = 200.
-        ch5_vmax = 320.
-        ch5_vm1 = 237.
-        jet_cnt = int(512 * (ch5_vm1 - ch5_vmin) / (ch5_vmax - ch5_vmin))
-        gray_cnt = 512 - jet_cnt
-        jet = cm.get_cmap('jet', jet_cnt)
-        gray = cm.get_cmap('gray', gray_cnt)
-        jetcolors = jet(np.linspace(0, 1, jet_cnt))
-        graycolors = gray(np.linspace(0.4, 1, gray_cnt))
-        newcolors = np.concatenate([jetcolors[::-1], graycolors[::-1]], axis=0)
-        newcm = ListedColormap(newcolors)
-        return newcm
-
-
-
-    def create_ch9_cmap(self, ch9):
-        from matplotlib import cm
-        from matplotlib.colors import ListedColormap
-
-        ch9_vmin = ch9.min()
-        ch9_vmax = ch9.max()
-        ch9_vm1 = 227.
-        jet_cnt = int(512 * (ch9_vm1 - ch9_vmin) / (ch9_vmax - ch9_vmin))
-        gray_cnt = 512 - jet_cnt
-        jet = cm.get_cmap('jet', jet_cnt)
-        gray = cm.get_cmap('gray', gray_cnt)
-        jetcolors = jet(np.linspace(0, 1, jet_cnt))
-        graycolors = gray(np.linspace(0.4, 1, gray_cnt))
-        newcolors = np.concatenate([jetcolors[::-1], graycolors], axis=0)
-        ch9_cm = ListedColormap(newcolors)
-        return ch9_cm
+    # def create_ch5_cmap(self):
+    #     from matplotlib import cm
+    #     from matplotlib.colors import ListedColormap
+    #
+    #     ch5_vmin = 200.
+    #     ch5_vmax = 320.
+    #     ch5_vm1 = 237.
+    #     jet_cnt = int(512 * (ch5_vm1 - ch5_vmin) / (ch5_vmax - ch5_vmin))
+    #     gray_cnt = 512 - jet_cnt
+    #     jet = cm.get_cmap('jet', jet_cnt)
+    #     gray = cm.get_cmap('gray', gray_cnt)
+    #     jetcolors = jet(np.linspace(0, 1, jet_cnt))
+    #     graycolors = gray(np.linspace(0.4, 1, gray_cnt))
+    #     newcolors = np.concatenate([jetcolors[::-1], graycolors[::-1]], axis=0)
+    #     newcm = ListedColormap(newcolors)
+    #     return newcm
 
 
 
-    def create_btd_cmap(self, btd):
-        from matplotlib import cm
-        from matplotlib.colors import ListedColormap
-
-        btd_vmin = btd.min()
-        btd_vmax = btd.max()
-        btd_vm1 = 0.
-        jet_cnt = int(512 * (btd_vmax - btd_vm1) / (btd_vmax - btd_vmin))
-        gray_cnt = 512 - jet_cnt
-        jet = cm.get_cmap('jet', jet_cnt)
-        gray = cm.get_cmap('gray', gray_cnt)
-        jetcolors = jet(np.linspace(0, 1, jet_cnt))
-        graycolors = gray(np.linspace(0.4, 1, gray_cnt))
-        newcolors = np.concatenate([graycolors[::-1], jetcolors], axis=0)
-        btd_cm = ListedColormap(newcolors)
-        return btd_cm
-
-
+    # def create_ch9_cmap(self, ch9):
+    #     from matplotlib import cm
+    #     from matplotlib.colors import ListedColormap
+    #
+    #     ch9_vmin = ch9.min()
+    #     ch9_vmax = ch9.max()
+    #     ch9_vm1 = 227.
+    #     jet_cnt = int(512 * (ch9_vm1 - ch9_vmin) / (ch9_vmax - ch9_vmin))
+    #     gray_cnt = 512 - jet_cnt
+    #     jet = cm.get_cmap('jet', jet_cnt)
+    #     gray = cm.get_cmap('gray', gray_cnt)
+    #     jetcolors = jet(np.linspace(0, 1, jet_cnt))
+    #     graycolors = gray(np.linspace(0.4, 1, gray_cnt))
+    #     newcolors = np.concatenate([jetcolors[::-1], graycolors], axis=0)
+    #     ch9_cm = ListedColormap(newcolors)
+    #     return ch9_cm
 
 
 
-    @classmethod
+    # def create_btd_cmap(self, btd):
+    #     from matplotlib import cm
+    #     from matplotlib.colors import ListedColormap
+    #
+    #     btd_vmin = btd.min()
+    #     btd_vmax = btd.max()
+    #     btd_vm1 = 0.
+    #     jet_cnt = int(512 * (btd_vmax - btd_vm1) / (btd_vmax - btd_vmin))
+    #     gray_cnt = 512 - jet_cnt
+    #     jet = cm.get_cmap('jet', jet_cnt)
+    #     gray = cm.get_cmap('gray', gray_cnt)
+    #     jetcolors = jet(np.linspace(0, 1, jet_cnt))
+    #     graycolors = gray(np.linspace(0.4, 1, gray_cnt))
+    #     newcolors = np.concatenate([graycolors[::-1], jetcolors], axis=0)
+    #     btd_cm = ListedColormap(newcolors)
+    #     return btd_cm
+
+
+
+
+
+    # @classmethod
     def t_brightness_calculate(self, data, channelname = 'ch9'):
         # if channelname == 'ch5_ch9':
         #     ch5_temp = self.t_brightness_calculate(data['ch5'], 'ch5')
@@ -213,10 +220,6 @@ class TrackingBasemapHelperClass(object):
                 curr_data = ds1.variables[dataname][:]
                 curr_data.mask = self.lats.mask
                 self.__dict__['data_%s' % dataname] = self.t_brightness_calculate(curr_data, dataname)
-
-        self.channelColormaps = [self.create_ch9_cmap(self.__dict__['data_ch9']),
-                                 self.create_ch5_cmap(),
-                                 self.create_btd_cmap(self.__dict__['data_ch5_ch9'])]
 
 
 
@@ -339,19 +342,20 @@ class TrackingBasemapHelperClass(object):
         counter = 0
         debug_cache = None
 
-        for dataname,cmap in zip(self.channelNames, self.channelColormaps):
+        for dataname,cmap,vmin,vmax in zip(self.channelNames, self.channelColormaps, self.channelVmin, self.channelVmax):
             counter += 1
             if (counter > 1) & (debug):
                 self.__dict__['DataLayerImage_%s' % dataname] = debug_cache
             else:
                 DataFigure = plt.figure(figsize=(8, 8), dpi=300)
                 data = self.__dict__['data_%s' % dataname]
-                vmin = data[data.mask==False].min()
-                vmax = data[data.mask==False].max()
-                self.bm.pcolormesh(self.lons.data, self.lats.data, data,
-                                   latlon=True, alpha=1.0,
-                                   vmin=vmin, vmax=vmax, cmap=cmap)
+                # vmin = data[data.mask==False].min()
+                # vmax = data[data.mask==False].max()
+                im = self.bm.pcolormesh(self.lons.data, self.lats.data, data,
+                                        latlon=True, alpha=1.0,
+                                        vmin=vmin, vmax=vmax, cmap=cmap)
                 plt.axis("off")
+                # plt.colorbar(im)
                 buf = io.BytesIO()
                 DataFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
                 plt.close()
@@ -364,6 +368,10 @@ class TrackingBasemapHelperClass(object):
         BasemapImageCV = cv2.imdecode(self.BasemapLayerImage, cv2.IMREAD_COLOR)
         DataLayerImageCV = cv2.imdecode(self.__dict__['DataLayerImage_%s' % self.dataToPlot], cv2.IMREAD_COLOR)
         self.CVimageCombined = cv2.addWeighted(BasemapImageCV, alpha, DataLayerImageCV, beta, 0.0)
+        # self.CVimageCombined = DataLayerImageCV
+        # DEBUG
+        # DataLayerImageCV = cv2.imdecode(self.__dict__['DataLayerImage_%s' % self.dataToPlot], cv2.IMREAD_COLOR)
+        # self.CVimageCombined = DataLayerImageCV
 
 
     # def CVimageCombined_RGB888(self):

@@ -41,17 +41,13 @@ class Canvas(QWidget):
         self.shapes = []
         self.current = None
         self.selectedShape = None  # save the selected shape here
-
-        # MK
-        # self.bmShapes = []
-        # self.selectedBmShape = None
-        # self.temporaryShapes = []
-        # self.selectedTemporaryShape = None
+        # self.curr_dt = None
 
         self.selectedShapeCopy = None
         self.drawingLineColor = QColor(0, 0, 255)
         self.drawingRectColor = QColor(0, 0, 255) 
-        self.line = Shape(line_color=self.drawingLineColor, parent_canvas=self)
+        # self.line = Shape(line_color=self.drawingLineColor, parent_canvas=self)
+        self.line = Shape(parent_canvas=self)
         self.prevPoint = QPointF()
         self.offsets = QPointF(), QPointF()
         self.scale = 1.0
@@ -69,6 +65,8 @@ class Canvas(QWidget):
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.WheelFocus)
         self.verified = False
+
+
 
     def setDrawingColor(self, qColor):
         self.drawingLineColor = qColor
@@ -272,20 +270,26 @@ class Canvas(QWidget):
 
 
 
-    def endMove(self, copy=False):
+    # def endMove(self, copy=False):
+    #     assert self.selectedShape and self.selectedShapeCopy
+    #     shape = self.selectedShapeCopy
+    #     if copy:
+    #         self.shapes.append(shape)
+    #         self.selectedShape.selected = False
+    #         self.selectedShape = shape
+    #         self.repaint()
+    #     else:
+    #         self.selectedShape.points = [p for p in shape.points]
+    #     self.selectedShapeCopy = None
+    #     self.recalculateMovedLatlonPointsSelectedShape()
+    def endMove(self):
         assert self.selectedShape and self.selectedShapeCopy
         shape = self.selectedShapeCopy
-        #del shape.fill_color
-        #del shape.line_color
-        if copy:
-            self.shapes.append(shape)
-            self.selectedShape.selected = False
-            self.selectedShape = shape
-            self.repaint()
-        else:
-            self.selectedShape.points = [p for p in shape.points]
+        self.selectedShape.points = [p for p in shape.points]
         self.selectedShapeCopy = None
         self.recalculateMovedLatlonPointsSelectedShape()
+
+
 
     def hideBackroundShapes(self, value):
         self.hideBackround = value
@@ -297,35 +301,14 @@ class Canvas(QWidget):
 
     def handleDrawing(self, pos):
         if self.current:
-            if not self.current.isEllipse:
-                if not self.current.reachMaxPoints():
-                    initPos = self.current[0]
-                    minX = initPos.x()
-                    minY = initPos.y()
-                    targetPos = self.line[1]
-                    maxX = targetPos.x()
-                    maxY = targetPos.y()
-                    self.current.addPoint(QPointF(maxX, minY), self.transformToLatLon(QPointF(maxX, minY), True))
-                    self.current.addPoint(targetPos, self.transformToLatLon(targetPos, True))
-                    self.current.addPoint(QPointF(minX, maxY), self.transformToLatLon(QPointF(minX, maxY), True))
-                    # self.finalise()
-            else:
-                self.current.addPoint(pos, self.transformToLatLon(pos, True))
-                if len(self.current) == 3:
-                    self.current.close()
-                    self.finalise()
+            self.current.addPoint(pos, self.transformToLatLon(pos, True))
+            if len(self.current) == 3:
+                self.current.close()
+                self.finalise()
         elif not self.outOfPixmap(pos):
             self.current = Shape(parent_canvas=self)
 
-            # mk
-            self.current.isEllipse = True
-
             self.current.addPoint(pos, self.transformToLatLon(pos, True))
-
-            if not self.current.isEllipse:
-                self.line.points = [pos, pos]
-                self.setHiding()
-                self.drawingPolygon.emit(True)
 
             self.recalculateMovedLatlonPointsSelectedShape()
 
@@ -383,20 +366,6 @@ class Canvas(QWidget):
         shiftPos = pos - point
         shape.moveVertexBy(index, shiftPos)
 
-        if not shape.isEllipse:
-            lindex = (index + 1) % 4
-            rindex = (index + 3) % 4
-            lshift = None
-            rshift = None
-            if index % 2 == 0:
-                rshift = QPointF(shiftPos.x(), 0)
-                lshift = QPointF(0, shiftPos.y())
-            else:
-                lshift = QPointF(shiftPos.x(), 0)
-                rshift = QPointF(0, shiftPos.y())
-            shape.moveVertexBy(rindex, rshift)
-            shape.moveVertexBy(lindex, lshift)
-
     def boundedMoveShape(self, shape, pos):
         if self.outOfPixmap(pos):
             return False  # No need to move
@@ -435,15 +404,15 @@ class Canvas(QWidget):
             self.update()
             return shape
 
-    def copySelectedShape(self):
-        if self.selectedShape:
-            shape = self.selectedShape.copy()
-            self.deSelectShape()
-            self.shapes.append(shape)
-            shape.selected = True
-            self.selectedShape = shape
-            self.boundedShiftShape(shape)
-            return shape
+    # def copySelectedShape(self):
+    #     if self.selectedShape:
+    #         shape = self.selectedShape.copy()
+    #         self.deSelectShape()
+    #         self.shapes.append(shape)
+    #         shape.selected = True
+    #         self.selectedShape = shape
+    #         self.boundedShiftShape(shape)
+    #         return shape
 
     def boundedShiftShape(self, shape):
         # Try to move in one direction, and if it fails in another.
@@ -587,9 +556,6 @@ class Canvas(QWidget):
         self.update()
 
     def closeEnough(self, p1, p2):
-        #d = distance(p1 - p2)
-        #m = (p1-p2).manhattanLength()
-        # print "d %.2f, m %d, %.2f" % (d, m, d - m)
         return distance(p1 - p2) < self.epsilon
 
     def intersectionPoint(self, p1, p2):
@@ -689,15 +655,6 @@ class Canvas(QWidget):
             self.moveOnePixel('Up')
         elif key == Qt.Key_Down and self.selectedShape:
             self.moveOnePixel('Down')
-        # elif key == Qt.Key_V:
-        #     try:
-        #         # bmhelper = self.parent().window().basemaphelper
-        #         # valueStr = bmhelper.getValueStr_AtCoordinates(self.mousePosLatLon.x(), self.mousePosLatLon.y())
-        #         valueStr = 'unknown'
-        #     except:
-        #         valueStr = 'unknown'
-        #     self.setToolTip('')
-        #     self.setToolTip('Value: %s' % valueStr)
 
     def moveOnePixel(self, direction):
         # print(self.selectedShape.points)
@@ -706,30 +663,21 @@ class Canvas(QWidget):
             self.selectedShape.points[0] += QPointF(-1.0, 0)
             self.selectedShape.points[1] += QPointF(-1.0, 0)
             self.selectedShape.points[2] += QPointF(-1.0, 0)
-
-            if not self.selectedShape.isEllipse:
-                self.selectedShape.points[3] += QPointF(-1.0, 0)
         elif direction == 'Right' and not self.moveOutOfBound(QPointF(1.0, 0)):
             # print("move Right one pixel")
             self.selectedShape.points[0] += QPointF(1.0, 0)
             self.selectedShape.points[1] += QPointF(1.0, 0)
             self.selectedShape.points[2] += QPointF(1.0, 0)
-            if not self.selectedShape.isEllipse:
-                self.selectedShape.points[3] += QPointF(1.0, 0)
         elif direction == 'Up' and not self.moveOutOfBound(QPointF(0, -1.0)):
             # print("move Up one pixel")
             self.selectedShape.points[0] += QPointF(0, -1.0)
             self.selectedShape.points[1] += QPointF(0, -1.0)
             self.selectedShape.points[2] += QPointF(0, -1.0)
-            if not self.selectedShape.isEllipse:
-                self.selectedShape.points[3] += QPointF(0, -1.0)
         elif direction == 'Down' and not self.moveOutOfBound(QPointF(0, 1.0)):
             # print("move Down one pixel")
             self.selectedShape.points[0] += QPointF(0, 1.0)
             self.selectedShape.points[1] += QPointF(0, 1.0)
             self.selectedShape.points[2] += QPointF(0, 1.0)
-            if not self.selectedShape.isEllipse:
-                self.selectedShape.points[3] += QPointF(0, 1.0)
 
         self.recalculateMovedLatlonPointsSelectedShape()
 
@@ -743,7 +691,7 @@ class Canvas(QWidget):
 
     def setLastLabel(self, text, line_color  = None, fill_color = None):
         assert text
-        self.shapes[-1].label = text
+        self.shapes[-1].label.name = text
         if line_color:
             self.shapes[-1].line_color = line_color
         

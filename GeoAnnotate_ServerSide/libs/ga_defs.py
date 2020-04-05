@@ -38,3 +38,12 @@ def ReportException(err_fname, ex):
         traceback.print_tb(exc_traceback, limit=None, file=errf)
         traceback.print_exception(exc_type, exc_value, exc_traceback, limit=None, file=errf)
         errf.write('\n\n\n')
+
+
+def ReportError(err_fname, webapi_client_id, error_description, error_additional_data):
+    with open(err_fname, 'a') as errf:
+        errf.write('================ ' + str(datetime.datetime.now()) + ' ================\n')
+        errf.writelines('webapi_client_id: \t%s' % webapi_client_id)
+        errf.writelines('error_description: \t%s' % error_description)
+        errf.writelines('error_data: \t%s' % error_additional_data)
+        errf.write('\n\n\n')

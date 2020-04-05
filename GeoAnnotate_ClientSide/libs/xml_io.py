@@ -5,6 +5,11 @@ from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
 from lxml import etree
 import codecs
+import uuid
+from .MCSlabel import MCSlabel
+import os, re
+from datetime import datetime
+from .ServiceDefs import ReportException
 
 PASCAL_XML_EXT = '.PASCAL.xml'
 MCC_XML_EXT = '.MCC.xml'
@@ -12,10 +17,7 @@ ENCODE_METHOD = 'utf-8'
 
 class ArbitraryXMLWriter:
 
-    def __init__(self, foldername, filename, imgSize,databaseSrc='Unknown', localImgPath=None):
-        self.foldername = foldername
-        self.filename = filename
-        self.databaseSrc = databaseSrc
+    def __init__(self, localImgPath, imgSize):
         self.imgSize = imgSize
         self.boxlist = []
         self.localImgPath = localImgPath
@@ -28,37 +30,28 @@ class ArbitraryXMLWriter:
         rough_string = ElementTree.tostring(elem, 'utf8')
         root = etree.fromstring(rough_string)
         return etree.tostring(root, pretty_print=True, encoding=ENCODE_METHOD).replace("  ".encode(), "\t".encode())
-        # minidom does not support UTF-8
-        '''reparsed = minidom.parseString(rough_string)
-        return reparsed.toprettyxml(indent="\t", encoding=ENCODE_METHOD)'''
 
     def genXML(self):
         """
             Return XML root
         """
         # Check conditions
-        if self.filename is None or \
-                self.foldername is None or \
-                self.imgSize is None:
+        if self.imgSize is None:
             return None
 
         top = Element('annotation')
-        if self.verified:
-            top.set('verified', 'yes')
+        # if self.verified:
+        #     top.set('verified', 'yes')
 
-        folder = SubElement(top, 'folder')
-        folder.text = self.foldername
+        # folder = SubElement(top, 'folder')
+        # folder.text = self.foldername
 
-        filename = SubElement(top, 'filename')
-        filename.text = self.filename
+        # filename = SubElement(top, 'filename')
+        # filename.text = self.filename
 
         if self.localImgPath is not None:
-            localImgPath = SubElement(top, 'path')
+            localImgPath = SubElement(top, 'filename')
             localImgPath.text = self.localImgPath
-
-        source = SubElement(top, 'source')
-        database = SubElement(source, 'database')
-        database.text = self.databaseSrc
 
         size_part = SubElement(top, 'size')
         width = SubElement(size_part, 'width')
@@ -74,40 +67,28 @@ class ArbitraryXMLWriter:
         return top
 
     def addEllipse(self, ellipse_shape):
-        ellipse_properties = {'lon0': ellipse_shape.latlonPoints[0].x(),
-                              'lat0': ellipse_shape.latlonPoints[0].y(),
-                              'lon1': ellipse_shape.latlonPoints[1].x(),
-                              'lat1': ellipse_shape.latlonPoints[1].y(),
-                              'lon2': ellipse_shape.latlonPoints[2].x(),
-                              'lat2': ellipse_shape.latlonPoints[2].y()}
-        ellipse_properties['name'] = ellipse_shape.label
-        ellipse_properties['isEllipse'] = ellipse_shape.isEllipse
+        curr_label = ellipse_shape.label
+        ellipse_properties = {'lon0': curr_label.pts['pt0']['lon'],
+                              'lat0': curr_label.pts['pt0']['lat'],
+                              'lon1': curr_label.pts['pt1']['lon'],
+                              'lat1': curr_label.pts['pt1']['lat'],
+                              'lon2': curr_label.pts['pt2']['lon'],
+                              'lat2': curr_label.pts['pt2']['lat']}
+        ellipse_properties['name'] = curr_label.name
+        ellipse_properties['uid'] = curr_label.uid
         self.boxlist.append(ellipse_properties)
 
     def appendObjects(self, top):
         for each_object in self.boxlist:
             object_item = SubElement(top, 'object')
+
+            uid = SubElement(object_item, 'uid')
+            uid.text = each_object['uid']
+
             name = SubElement(object_item, 'name')
-            try:
-                name.text = unicode(each_object['name'])
-            except NameError:
-                # Py3: NameError: name 'unicode' is not defined
-                name.text = each_object['name']
+            name.text = each_object['name']
 
             ellipse = SubElement(object_item, 'ellipse')
-
-            # x0 = SubElement(ellipse, 'x0')
-            # x0.text = str(each_object['x0'])
-            # y0 = SubElement(ellipse, 'y0')
-            # y0.text = str(each_object['y0'])
-            # x1 = SubElement(ellipse, 'x1')
-            # x1.text = str(each_object['x1'])
-            # y1 = SubElement(ellipse, 'y1')
-            # y1.text = str(each_object['y1'])
-            # x2 = SubElement(ellipse, 'x2')
-            # x2.text = str(each_object['x2'])
-            # y2 = SubElement(ellipse, 'y2')
-            # y2.text = str(each_object['y2'])
 
             lon0 = SubElement(ellipse, 'lon0')
             lon0.text = str(each_object['lon0'])
@@ -122,8 +103,6 @@ class ArbitraryXMLWriter:
             lat2 = SubElement(ellipse, 'lat2')
             lat2.text = str(each_object['lat2'])
 
-            isEllipse = SubElement(ellipse, 'isEllipse')
-            isEllipse.text = str(each_object['isEllipse'])
 
     def save(self, targetFile=None):
         root = self.genXML()
@@ -143,49 +122,73 @@ class ArbitraryXMLWriter:
 class ArbitraryXMLReader:
 
     def __init__(self, filepath):
-        # shapes type:
-        # [labbel, [(x1,y1), (x2,y2), (x3,y3), (x4,y4)], color, color]
-        self.shapes = []
+        self.labels = []
         self.filepath = filepath
         self.verified = False
         try:
             self.parseXML()
-        except:
-            pass
+        except Exception as ex:
+            print('unable to parse XML label file: \n%s' % self.filepath)
+            raise Exception('unable to parse XML label file: \n%s' % self.filepath)
 
-    def getShapes(self):
-        return self.shapes
+    def getLabels(self):
+        return self.labels
 
-    def addShape(self, label, bndbox):
-        # x0 = float(bndbox.find('x0').text)
-        # y0 = float(bndbox.find('y0').text)
-        # x1 = float(bndbox.find('x1').text)
-        # y1 = float(bndbox.find('y1').text)
-        # x2 = float(bndbox.find('x2').text)
-        # y2 = float(bndbox.find('y2').text)
+    # def addLabel(self, label_name, bndbox, uid, dt):
+    #     latlonPoints = [(lon0, lat0), (lon1, lat1), (lon2, lat2)]
 
-        lon0 = float(bndbox.find('lon0').text)
-        lat0 = float(bndbox.find('lat0').text)
-        lon1 = float(bndbox.find('lon1').text)
-        lat1 = float(bndbox.find('lat1').text)
-        lon2 = float(bndbox.find('lon2').text)
-        lat2 = float(bndbox.find('lat2').text)
-
-        # points = [(x0, y0), (x1, y1), (x2, y2)]
-        latlonPoints = [(lon0, lat0), (lon1, lat1), (lon2, lat2)]
-        isEllipse = True if bndbox.find('isEllipse').text.lower() == 'true' else False
-        # self.shapes.append((label, points, latlonPoints, None, None, isEllipse))
-        self.shapes.append((label, latlonPoints, None, None, isEllipse))
 
     def parseXML(self):
         assert self.filepath.endswith(MCC_XML_EXT), "Unsupported file format"
         parser = etree.XMLParser(encoding=ENCODE_METHOD)
         xmltree = ElementTree.parse(self.filepath, parser=parser).getroot()
-        filename = xmltree.find('filename').text
 
         for object_iter in xmltree.findall('object'):
             ellipse = object_iter.find("ellipse")
-            label = object_iter.find('name').text
-            # Add chris
-            self.addShape(label, ellipse)
+            label_name = object_iter.find('name').text
+            try:
+                uid = object_iter.find('uid').text
+            except:
+                # uid = str(uuid.uuid4()).replace('-', '')
+                uid = str(uuid.uuid4())
+
+            try:
+                uid = object_iter.find('uid').text
+            except:
+                # uid = str(uuid.uuid4()).replace('-', '')
+                uid = str(uuid.uuid4())
+
+            loaded_dt_from_xml = False
+            try:
+                dt = object_iter.find('datetime').text
+            except:
+                loaded_dt_from_xml = False
+
+            if not loaded_dt_from_xml:
+                try:
+                    # parse datetime from filename
+                    # W_XX-EUMETSAT-Darmstadt,VIS+IR+IMAGERY,MSG1+SEVIRI_C_EUMG_20180630143011.MCC.xml
+                    regex = r'.+(MSG\d)\+SEVIRI_C_EUMG_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.MCC\.xml'
+                    base_filepath = os.path.basename(self.filepath)
+                    m = re.match(regex, base_filepath)
+                    sat_name, year, month, day, hour, minute, second = m.groups()
+                    # ('MSG1', '2018', '06', '30', '14', '30', '11')
+                    dt = datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))
+                except Exception as ex:
+                    ReportException('./errors.log', ex)
+
+            lon0 = float(ellipse.find('lon0').text)
+            lat0 = float(ellipse.find('lat0').text)
+            lon1 = float(ellipse.find('lon1').text)
+            lat1 = float(ellipse.find('lat1').text)
+            lon2 = float(ellipse.find('lon2').text)
+            lat2 = float(ellipse.find('lat2').text)
+            pt0 = {'lat': lat0, 'lon': lon0}
+            pt1 = {'lat': lat1, 'lon': lon1}
+            pt2 = {'lat': lat2, 'lon': lon2}
+            pts = {'pt0': pt0, 'pt1': pt1, 'pt2': pt2}
+
+            # self.addLabel(label_name, ellipse, uid, dt)
+            # self.addLabel(MCSlabel(label_name, uid, dt, pts))
+            self.labels.append(MCSlabel(label_name, uid, dt, pts))
         return True

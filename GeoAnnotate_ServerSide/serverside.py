@@ -5,9 +5,8 @@ if sys.platform == 'win32':
 elif ((sys.platform == 'linux') | (sys.platform == 'darwin')):
     os.environ['PROJ_LIB'] = os.path.join(sys.executable.replace('bin/python', ''), 'share', 'proj')
 
-# sys.path.append('./')
-# sys.path.append('./libs/')
 from flask import Flask, request, send_file, make_response, Response
+import numpy as np
 from FlaskExtended import *
 from Support_defs import *
 from libs.TrackingBasemapHelper import *
@@ -200,8 +199,10 @@ def exec():
 
         # curr_fname = os.path.join(os.getcwd(), 'src_data', arg_src_fname)
         datetime_fname_stamp = os.path.splitext(os.path.basename(arg_src_fname))[0][-14:]
-        found_fnames = [f for f in find_files('./src_data/', '*%s.nc' % datetime_fname_stamp)]
+        sat_name = os.path.splitext(os.path.basename(arg_src_fname))[0][-33:-29]
+        found_fnames = [f for f in find_files('./src_data/', '*%s*%s.nc' % (sat_name, datetime_fname_stamp))]
         if len(found_fnames) == 0:
+            ReportError('./logs/app.err.log', webapi_client_id, 'FileNotFound', arg_src_fname)
             response = make_response('Unable to find file %s' % arg_src_fname)
             response.headers['ErrorDesc'] = 'FileNotFound'
             return response
@@ -209,7 +210,6 @@ def exec():
             curr_fname = found_fnames[0]
 
         if not DoesPathExistAndIsFile(curr_fname):
-            response = make_response('Unable to find file %s' % arg_src_fname)
             response = make_response('Unable to find file %s' % arg_src_fname)
             response.headers['ErrorDesc'] = 'FileNotFound'
             return response
@@ -255,8 +255,10 @@ def exec():
 
         # curr_fname = os.path.join(os.getcwd(), 'src_data', arg_src_fname)
         datetime_fname_stamp = os.path.splitext(os.path.basename(arg_src_fname))[0][-14:]
-        found_fnames = [f for f in find_files('./src_data/', '*%s.nc' % datetime_fname_stamp)]
+        sat_name = os.path.splitext(os.path.basename(arg_src_fname))[0][-33:-29]
+        found_fnames = [f for f in find_files('./src_data/', '*%s*%s.nc' % (sat_name, datetime_fname_stamp))]
         if len(found_fnames) == 0:
+            ReportError('./logs/app.err.log', webapi_client_id, 'FileNotFound', arg_src_fname)
             response = make_response('Unable to find file %s' % arg_src_fname)
             response.headers['ErrorDesc'] = 'FileNotFound'
             return response

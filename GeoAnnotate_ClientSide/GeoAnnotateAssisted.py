@@ -1,34 +1,40 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
 import codecs
 import distutils.spawn
 import os.path
-import platform
-import re
-import sys
-import subprocess
-
+import platform, re, sys, subprocess
 from functools import partial
 from collections import defaultdict
 import threading
 import pandas as pd
+import sqlite3
+import resources
 
 import sys
 python_path = sys.executable
-if sys.platform == 'win32':
-    os.environ['PROJ_LIB'] = os.path.join(os.path.split(python_path)[0], 'Library', 'share')
-elif ((sys.platform == 'linux') | (sys.platform == 'darwin')):
-    os.environ['PROJ_LIB'] = os.path.join(sys.executable.replace('bin/python', ''), 'share', 'proj')
 
+#region setting up PROJ_LIB
+def set_default_PROJ_LIB():
+    print('setting default PROJ_LIB environment variable')
+    if sys.platform == 'win32':
+        os.environ['PROJ_LIB'] = os.path.join(os.path.split(python_path)[0], 'Library', 'share')
+    elif ((sys.platform == 'linux') | (sys.platform == 'darwin')):
+        os.environ['PROJ_LIB'] = os.path.join(sys.executable.replace('bin/python', ''), 'share', 'proj')
 
+if (os.environ['PROJ_LIB']==''):
+    set_default_PROJ_LIB()
+elif ((os.path.exists(os.environ['PROJ_LIB'])) and
+      (os.path.isdir(os.environ['PROJ_LIB'])) and
+      (os.path.exists(os.path.join(os.environ['PROJ_LIB'], 'epsg'))) and
+      (os.path.isfile(os.path.join(os.environ['PROJ_LIB'], 'epsg')))):
+    pass
+else:
+    set_default_PROJ_LIB()
+#endregion setting up PROJ_LIB
 
-from mpl_toolkits.basemap import Basemap
-from netCDF4 import Dataset
-import numpy as np
-from libs.TrackingBasemapHelper import *
-
-
-
+#region import Qt
 try:
     from PyQt5.QtGui import *
     from PyQt5.QtCore import *
@@ -43,9 +49,9 @@ except ImportError:
         sip.setapi('QVariant', 2)
     from PyQt4.QtGui import *
     from PyQt4.QtCore import *
+#endregion
 
-import resources
-# Add internal libs
+#region Add internal libs
 from libs.constants import *
 from libs.lib import struct, newAction, newIcon, addActions, fmtShortcut, generateColorByText
 from libs.settings import Settings
@@ -56,17 +62,26 @@ from libs.labelDialog import LabelDialog
 from libs.colorDialog import ColorDialog
 from libs.labelFile import LabelFile, LabelFileError
 from libs.toolBar import ToolBar
-from libs.xml_io import ArbitraryXMLReader
-from libs.xml_io import MCC_XML_EXT
-import binascii
-
+from libs.xml_io import *
 from libs.ustr import ustr
 from libs.version import __version__
+from libs.HashableQListWidgetItem import HashableQListWidgetItem
+from libs.HashableQTreeWidgetItem import HashableQTreeWidgetItem
+from libs.TrackingBasemapHelper import *
+from libs.TrackSelectionDialog import TrackSelectionDialog
+from libs.tracks_database_ops import *
+from libs.track import *
+from libs.ServiceDefs import *
+from libs.QTreeWidgetFunctions import *
+from libs.SQLite_queries import *
+from libs.horsephrase_implementation import generate_horsephrase
+#endregion
+
+
 
 __appname__ = 'labelImg'
 
 # Utility functions and classes.
-
 def have_qstring():
     '''p3/qt5 get rid of QString wrapper as py3 has native unicode str type'''
     return not (sys.version_info.major >= 3 or QT_VERSION_STR.startswith('5.'))
@@ -94,16 +109,6 @@ class WindowMixin(object):
         return toolbar
 
 
-# PyQt5: TypeError: unhashable type: 'QListWidgetItem'
-class HashableQListWidgetItem(QListWidgetItem):
-
-    def __init__(self, *args):
-        super(HashableQListWidgetItem, self).__init__(*args)
-
-    def __hash__(self):
-        return hash(id(self))
-
-
 class MainWindow(QMainWindow, WindowMixin):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
 
@@ -113,6 +118,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         LabelFile.suffix = MCC_XML_EXT
         self.basemaphelper = None
+        self.trackingFunctionsAvailable = False
 
         # Load setting in the main thread
         self.settings = Settings(os.path.dirname(os.path.abspath(__file__)))
@@ -132,8 +138,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self._noSelectionSlot = False
         self._beginner = True
-        self.screencastViewer = self.getAvailableScreencastViewer()
-        self.screencast = "https://youtu.be/p0nR2YsCY_U"
 
         # Load predefined classes to the list
         self.loadPredefinedClasses(defaultPrefdefClassFile)
@@ -145,8 +149,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.shapesToItems = {}
         self.prevLabelText = ''
 
-        # self.basemapItemsToShapes = {}
-        # self.basemapShapesToItems = {}
+        self.TrackItemsToTracks = {}
+        self.TracksToTrackItems = {}
+
+        self.tracks = {}
 
         listLayout = QVBoxLayout()
         listLayout.setContentsMargins(0, 0, 0, 0)
@@ -161,10 +167,6 @@ class MainWindow(QMainWindow, WindowMixin):
         useDefaultLabelContainer = QWidget()
         useDefaultLabelContainer.setLayout(useDefaultLabelQHBoxLayout)
 
-        # Create a widget for edit and diffc button
-        # self.diffcButton = QCheckBox(u'difficult')
-        # self.diffcButton.setChecked(False)
-        # self.diffcButton.stateChanged.connect(self.btnstate)
         self.editButton = QToolButton()
         self.editButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 
@@ -173,8 +175,11 @@ class MainWindow(QMainWindow, WindowMixin):
         # listLayout.addWidget(self.diffcButton)
         listLayout.addWidget(useDefaultLabelContainer)
 
-        # Create and add a widget for showing current label items
-        self.labelList = QListWidget()
+        #region Create and add a widget for showing current label items
+        # self.labelList = QListWidget()
+        self.labelList = QTreeWidget()
+        self.labelList.setColumnCount(3)
+        self.labelList.setHeaderLabels(['name', 'uid', 'date,time'])
         labelListContainer = QWidget()
         labelListContainer.setLayout(listLayout)
         self.labelList.itemActivated.connect(self.labelSelectionChanged)
@@ -184,28 +189,34 @@ class MainWindow(QMainWindow, WindowMixin):
         self.labelList.itemChanged.connect(self.labelItemChanged)
         listLayout.addWidget(self.labelList)
 
-        self.dock = QDockWidget(u'Box Labels', self)
+        self.dock = QDockWidget(u'Labels', self)
         self.dock.setObjectName(u'Labels')
         self.dock.setWidget(labelListContainer)
-
-        # Tzutalin 20160906 : Add file list and dock to move faster
-        # self.basemapsListWidget = QListWidget()
-        # self.basemapsListWidget.itemActivated.connect(self.basemapListItemSelectionChanged)
-        # self.basemapsListWidget.itemSelectionChanged.connect(self.basemapListItemSelectionChanged)
-        # self.basemapsListWidget.itemDoubleClicked.connect(self.basemapListItemDoubleClicked)
-        # self.basemapsListWidget.focusInEvent()
-        # self.basemapsListWidget.installEventFilter(self)
-        # basemapsListLayout = QVBoxLayout()
-        # basemapsListLayout.setContentsMargins(0, 0, 0, 0)
-        # basemapsListLayout.addWidget(self.basemapsListWidget)
-        # basemapsListContainer = QWidget()
-        # basemapsListContainer.setLayout(basemapsListLayout)
-        # self.basemapsdock = QDockWidget(u'Cached basemaps List', self)
-        # self.basemapsdock.setObjectName(u'Cached basemaps')
-        # self.basemapsdock.setWidget(basemapsListContainer)
+        #endregion
+        self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
 
 
-        # Tzutalin 20160906 : Add file list and dock to move faster
+
+        #region MK - track list widget
+        # self.trackListWidget = QListWidget()
+        self.trackListWidget = QTreeWidget()
+        self.trackListWidget.setColumnCount(2)
+        self.trackListWidget.setHeaderLabels(['name', 'uid', 'date,time'])
+        trackListLayout = QVBoxLayout()
+        trackListLayout.setContentsMargins(0, 0, 0, 0)
+        trackListLayout.addWidget(self.trackListWidget)
+        trackListContainer = QWidget()
+        trackListContainer.setLayout(trackListLayout)
+        self.trackdock = QDockWidget(u'Track List', self)
+        self.trackdock.setObjectName(u'Tracks')
+        self.trackListWidget.itemChanged.connect(self.trackItemChanged)
+        self.trackdock.setWidget(trackListContainer)
+        #endregion MK - track list widget
+        self.addDockWidget(Qt.RightDockWidgetArea, self.trackdock)
+
+
+
+        #region Tzutalin 20160906 : Add file list and dock to move faster
         self.fileListWidget = QListWidget()
         self.fileListWidget.itemDoubleClicked.connect(self.fileitemDoubleClicked)
         filelistLayout = QVBoxLayout()
@@ -216,13 +227,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.filedock = QDockWidget(u'File List', self)
         self.filedock.setObjectName(u'Files')
         self.filedock.setWidget(fileListContainer)
-
-
-        # geofieldsListContainer = QWidget()
-        # geofieldsListContainer.setLayout(listLayout)
-        # self.GeoFieldsDock = QListWidget(u'Geophysical fields', self)
-        # self.GeoFieldsDock.setObjectName(u'GeoFields')
-        # self.filedock.setWidget(geofieldsListContainer)
+        # self.filedock.setFeatures(QDockWidget.DockWidgetFloatable)
+        #endregion
+        self.addDockWidget(Qt.RightDockWidgetArea, self.filedock)
 
         self.zoomWidget = ZoomWidget()
         self.colorDialog = ColorDialog(parent=self)
@@ -246,18 +253,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.drawingPolygon.connect(self.toggleDrawingSensitive)
 
         self.setCentralWidget(scroll)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
-        # Tzutalin 20160906 : Add file list and dock to move faster
-        self.addDockWidget(Qt.RightDockWidgetArea, self.filedock)
-        self.filedock.setFeatures(QDockWidget.DockWidgetFloatable)
 
-        # self.addDockWidget(Qt.RightDockWidgetArea, self.basemapsdock)
-        # self.basemapsdock.setFeatures(QDockWidget.DockWidgetFloatable)
-
-        self.dockFeatures = QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable
-        self.dock.setFeatures(self.dock.features() ^ self.dockFeatures)
-
-        # Actions
+        #region Actions
         action = partial(newAction, self)
         quit = action('&Quit', self.closing,
                       'Ctrl+Q', 'quit', u'Quit application')
@@ -274,7 +271,7 @@ class MainWindow(QMainWindow, WindowMixin):
         openAnnotation = action('&Open Annotation', self.openAnnotationDialog,
                                 'Ctrl+Shift+O', 'open', u'Open Annotation')
 
-        openNextImg = action('&Next file', self.openNextImg,
+        openNextImg = action('Next file', self.openNextImg,
                              'd', 'next', u'Open Next')
 
         openPrevImg = action('&Prev Image', self.openPrevImg,
@@ -285,9 +282,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
         save = action('&Save', self.saveFile,
                       'Ctrl+S', 'save', u'Save labels to file', enabled=False)
-
-        # save_format = action('&PascalVOC', self.change_format,
-        #               'Ctrl+', 'format_voc', u'Change save format', enabled=True)
 
         saveAs = action('&Save As', self.saveFileAs,
                         'Ctrl+Shift+S', 'save-as', u'Save labels to a different file', enabled=False)
@@ -309,9 +303,15 @@ class MainWindow(QMainWindow, WindowMixin):
 
         delete = action('Delete ellipse', self.deleteSelectedShape,
                         'Delete', 'delete', u'Delete', enabled=False)
-        copy = action('&Duplicate ellipse', self.copySelectedShape,
-                      'Ctrl+D', 'copy', u'Create a duplicate of the selected Box',
-                      enabled=False)
+        # copy = action('&Duplicate ellipse', self.copySelectedShape,
+        #               'Ctrl+D', 'copy', u'Create a duplicate of the selected Box',
+        #               enabled=False)
+
+        start_track = action('Start &new track', self.startNewTrack, 'Ctrl+N',
+                             'new track', u'Creating new track starting from this label')
+
+        continue_track = action('Continue a track', self.continueExistingTrack, None,
+                             'continue track', u'Continue an existing track...')
 
         advancedMode = action('&Advanced Mode', self.toggleAdvancedMode,
                               'Ctrl+Shift+A', 'expert', u'Switch to advanced mode',
@@ -324,7 +324,6 @@ class MainWindow(QMainWindow, WindowMixin):
                          'Ctrl+A', 'hide', u'Show all Boxs',
                          enabled=False)
 
-        help = action('&Tutorial', self.showTutorialDialog, None, 'help', u'Show demos')
         showInfo = action('&Information', self.showInfoDialog, None, 'help', u'Information')
 
         zoom = QWidgetAction(self)
@@ -352,13 +351,9 @@ class MainWindow(QMainWindow, WindowMixin):
                           'Ctrl+Shift+M', 'refresh-basemap', u'Reconstruct zoomed basemap',
                           checkable=True, enabled=False)
 
-        zoomIncreaseResolution = action('Refresh map Hires', self.refreshBasemapHires,
-                          '', 'refresh-basemap-hires', u'',
-                          checkable=True, enabled=False)
+        zoomIncreaseResolution = action('Refresh map Hires', self.refreshBasemapHires, '', 'refresh-basemap-hires', u'', checkable=True, enabled=False)
 
-        switchDataChannel = action('Switch data\nchannel', self.switchChannel,
-                                   '', 'switch-channel', 'Switch data channel',
-                                   checkable=True, enabled=False)
+        switchDataChannel = action('Switch data\nchannel', self.switchChannel, '', 'switch-channel', 'Switch data channel', checkable=True, enabled=False)
 
 
         # Group zoom controls into a list for easier toggling.
@@ -372,17 +367,12 @@ class MainWindow(QMainWindow, WindowMixin):
             self.MANUAL_ZOOM: lambda: 1,
         }
 
-        edit = action('&Edit Label', self.editLabel,
-                      'Ctrl+E', 'edit', u'Modify the label of the selected Box',
-                      enabled=False)
+        edit = action('&Edit Label', self.editLabel, 'Ctrl+E', 'edit', u'Modify the label of the selected Box', enabled=False)
         self.editButton.setDefaultAction(edit)
 
-        shapeLineColor = action('Shape &Line Color', self.chshapeLineColor,
-                                icon='color_line', tip=u'Change the line color for this specific shape',
-                                enabled=False)
-        shapeFillColor = action('Shape &Fill Color', self.chshapeFillColor,
-                                icon='color', tip=u'Change the fill color for this specific shape',
-                                enabled=False)
+        shapeLineColor = action('Shape &Line Color', self.chshapeLineColor, icon='color_line', tip=u'Change the line color for this specific shape', enabled=False)
+        shapeFillColor = action('Shape &Fill Color', self.chshapeFillColor, icon='color', tip=u'Change the fill color for this specific shape', enabled=False)
+
 
         labels = self.dock.toggleViewAction()
         labels.setText('Show/Hide Label Panel')
@@ -392,48 +382,44 @@ class MainWindow(QMainWindow, WindowMixin):
         labelMenu = QMenu()
         addActions(labelMenu, (edit, delete))
         self.labelList.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.labelList.customContextMenuRequested.connect(
-            self.popLabelListMenu)
+        self.labelList.customContextMenuRequested.connect(self.popLabelListMenu)
 
-        # Store actions for further handling.
-        # self.actions = struct(save=save, save_format=save_format, saveAs=saveAs, open=open, close=close, resetAll = resetAll,
+        # self.actions = struct(save=save, saveAs=saveAs, open=open, close=close,
+        #                       resetAll=resetAll,
         #                       lineColor=color1, create=create, delete=delete, edit=edit, copy=copy,
         #                       createMode=createMode, editMode=editMode, advancedMode=advancedMode,
         #                       shapeLineColor=shapeLineColor, shapeFillColor=shapeFillColor,
         #                       zoom=zoom, zoomIn=zoomIn, zoomOut=zoomOut, zoomOrg=zoomOrg,
         #                       fitWindow=fitWindow, fitWidth=fitWidth,
         #                       zoomActions=zoomActions,
-        #                       fileMenuActions=(
-        #                           open, opendir, save, saveAs, close, resetAll, quit),
-        #                       beginner=(), advanced=(),
-        #                       editMenu=(edit, copy, delete,
-        #                                 None, color1),
-        #                       beginnerContext=(create, edit, copy, delete),
-        #                       advancedContext=(createMode, editMode, edit, copy,
-        #                                        delete, shapeLineColor, shapeFillColor),
-        #                       onLoadActive=(
-        #                           close, create, createMode, editMode),
-        #                       onShapesPresent=(saveAs, hideAll, showAll))
+        #                       refreshBasemap = zoomReplotBasemap,
+        #                       zoomHires = zoomIncreaseResolution,
+        #                       fileMenuActions=(open, opendir, save, saveAs, close, resetAll, quit),
+        #                       beginner=(),
+        #                       advanced=(),
+        #                       editMenu=(edit, copy, delete, None, color1),
+        #                       beginnerContext=(create, edit, copy, delete, start_track, continue_track),
+        #                       advancedContext=(createMode, editMode, edit, copy, delete, shapeLineColor, shapeFillColor),
+        #                       onLoadActive=(close, create, createMode, editMode),
+        #                       onShapesPresent=(saveAs, hideAll, showAll),
+        #                       switchDataChannel=switchDataChannel)
         self.actions = struct(save=save, saveAs=saveAs, open=open, close=close,
                               resetAll=resetAll,
-                              lineColor=color1, create=create, delete=delete, edit=edit, copy=copy,
+                              lineColor=color1, create=create, delete=delete, edit=edit,
                               createMode=createMode, editMode=editMode, advancedMode=advancedMode,
                               shapeLineColor=shapeLineColor, shapeFillColor=shapeFillColor,
                               zoom=zoom, zoomIn=zoomIn, zoomOut=zoomOut, zoomOrg=zoomOrg,
                               fitWindow=fitWindow, fitWidth=fitWidth,
                               zoomActions=zoomActions,
-                              refreshBasemap = zoomReplotBasemap,
-                              zoomHires = zoomIncreaseResolution,
-                              fileMenuActions=(
-                                  open, opendir, save, saveAs, close, resetAll, quit),
-                              beginner=(), advanced=(),
-                              editMenu=(edit, copy, delete,
-                                        None, color1),
-                              beginnerContext=(create, edit, copy, delete),
-                              advancedContext=(createMode, editMode, edit, copy,
-                                               delete, shapeLineColor, shapeFillColor),
-                              onLoadActive=(
-                                  close, create, createMode, editMode),
+                              refreshBasemap=zoomReplotBasemap,
+                              zoomHires=zoomIncreaseResolution,
+                              fileMenuActions=(open, opendir, save, saveAs, close, resetAll, quit),
+                              beginner=(),
+                              advanced=(),
+                              editMenu=(edit, delete, None, color1),
+                              beginnerContext=(create, edit, delete, start_track, continue_track),
+                              advancedContext=(createMode, editMode, edit, delete, shapeLineColor, shapeFillColor),
+                              onLoadActive=(close, create, createMode, editMode),
                               onShapesPresent=(saveAs, hideAll, showAll),
                               switchDataChannel=switchDataChannel)
 
@@ -468,12 +454,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.paintLabelsOption.setChecked(settings.get(SETTING_PAINT_LABEL, False))
         self.paintLabelsOption.triggered.connect(self.togglePaintLabelsOption)
 
-        # addActions(self.menus.file,
-        #            (open, opendir, changeSavedir, openAnnotation, self.menus.recentFiles, save, save_format, saveAs, close, resetAll, quit))
         addActions(self.menus.file,
                    (open, opendir, changeSavedir, openAnnotation, self.menus.recentFiles, save, saveAs,
                     close, resetAll, quit))
-        addActions(self.menus.help, (help, showInfo))
+        # addActions(self.menus.help, (help, showInfo))
+        addActions(self.menus.help, [showInfo])
         addActions(self.menus.view, (
             self.preserveBasemapConfig,
             self.autoSaving,
@@ -488,27 +473,27 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Custom context menu for the canvas widget:
         addActions(self.canvas.menus[0], self.actions.beginnerContext)
-        addActions(self.canvas.menus[1], (
-            action('&Copy here', self.copyShape),
-            action('&Move here', self.moveShape)))
+        # addActions(self.canvas.menus[1], (
+        #     action('&Copy here', self.copyShape),
+        #     action('&Move here', self.moveShape)))
+        addActions(self.canvas.menus[1], [action('&Move here', self.moveShape)])
 
         self.tools = self.toolbar('Tools')
         # self.actions.beginner = (
-        #     open, opendir, changeSavedir, openNextImg, openPrevImg, verify, save, save_format, None, create, copy, delete, None,
-        #     zoomIn, zoom, zoomOut, fitWindow, fitWidth)
+        #     open, opendir, changeSavedir, openNextImg, openPrevImg, save, None, create, copy,
+        #     delete, None,
+        #     zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
         self.actions.beginner = (
-            open, opendir, changeSavedir, openNextImg, openPrevImg, save, None, create, copy,
+            open, opendir, changeSavedir, openNextImg, openPrevImg, save, None, create,
             delete, None,
             zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
 
-        # self.actions.advanced = (
-        #     open, opendir, changeSavedir, openNextImg, openPrevImg, save, save_format, None,
-        #     createMode, editMode, None,
-        #     hideAll, showAll)
         self.actions.advanced = (
             open, opendir, changeSavedir, openNextImg, openPrevImg, save, None,
             createMode, editMode, None,
             hideAll, showAll)
+
+        #endregion Actions
 
         self.statusBar().showMessage('%s started.' % __appname__)
         self.statusBar().show()
@@ -544,6 +529,31 @@ class MainWindow(QMainWindow, WindowMixin):
             self.statusBar().showMessage('%s started. Annotation will be saved to %s' %
                                          (__appname__, self.defaultSaveDir))
             self.statusBar().show()
+
+
+        #region tracks database
+        try:
+            self.tracks_db_fname = self.settings.get(SETTING_TRACKS_DATABASE_FNAME, os.path.join(self.defaultSaveDir, 'tracks.db'))
+            self.settings[SETTING_TRACKS_DATABASE_FNAME] = self.tracks_db_fname
+        except:
+            self.tracks_db_fname = os.path.join(os.getcwd(), 'tracks.db')
+            self.settings[SETTING_TRACKS_DATABASE_FNAME] = self.tracks_db_fname
+
+        if (os.path.exists(self.tracks_db_fname) and os.path.isfile(self.tracks_db_fname)):
+            if test_db_connection(self.tracks_db_fname):
+                print('tracks database connection successful')
+                self.tracking_available = True
+            else:
+                print('WARNING! tracks database connection failed')
+                self.tracking_available = False
+        else:
+            if create_tracks_db(self.tracks_db_fname):
+                print('created new tracks database file: %s' % self.tracks_db_fname)
+                self.tracking_available = True
+            else:
+                self.tracking_available = False
+        #endregion
+
 
         self.restoreState(settings.get(SETTING_WIN_STATE, QByteArray()))
         Shape.line_color = self.lineColor = QColor(settings.get(SETTING_LINE_COLOR, DEFAULT_LINE_COLOR))
@@ -582,18 +592,6 @@ class MainWindow(QMainWindow, WindowMixin):
         # Open Dir if deafult file
         if self.filePath and os.path.isdir(self.filePath):
             self.openDirDialog(dirpath=self.filePath)
-
-
-
-
-    #MK
-    # def eventFilter(self, source, event):
-    #     if source is self.basemapsListWidget:
-    #         if event.type() == QEvent.FocusIn:
-    #             self.canvas.switchBasemapAndMainShapes()
-    #         elif event.type() == QEvent.FocusOut:
-    #             self.canvas.switchBackBasemapAndMainShapes()
-    #     return QWidget.eventFilter(self, source, event)
 
 
 
@@ -660,11 +658,12 @@ class MainWindow(QMainWindow, WindowMixin):
     def resetState(self):
         self.itemsToShapes.clear()
         self.shapesToItems.clear()
-        #MK
-        # self.basemapItemsToShapes.clear()
-        # self.basemapShapesToItems.clear()
-        # self.basemapsListWidget.clear()
-        # self.basemaphelper = None
+
+        self.tracks.clear()
+        self.TracksToTrackItems.clear()
+        self.TrackItemsToTracks.clear()
+
+        self.trackListWidget.clear()
 
         self.labelList.clear()
         self.filePath = None
@@ -692,23 +691,65 @@ class MainWindow(QMainWindow, WindowMixin):
     def advanced(self):
         return not self.beginner()
 
-    def getAvailableScreencastViewer(self):
-        osName = platform.system()
-
-        if osName == 'Windows':
-            return ['C:\\Program Files\\Internet Explorer\\iexplore.exe']
-        elif osName == 'Linux':
-            return ['xdg-open']
-        elif osName == 'Darwin':
-            return ['open', '-a', 'Safari']
-
     ## Callbacks ##
-    def showTutorialDialog(self):
-        subprocess.Popen(self.screencastViewer + [self.screencast])
-
     def showInfoDialog(self):
         msg = u'Name:{0} \nApp Version:{1} \n{2} '.format(__appname__, __version__, sys.version_info)
         QMessageBox.information(self, u'Information', msg)
+
+    def startNewTrack(self):
+        if self.canvas.selectedShape:
+            curr_track = Track()
+            self.addTrack(curr_track)
+            curr_track.append_new_label(self.canvas.selectedShape)
+            label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_FORMAT_STRING)])
+            self.TracksToTrackItems[curr_track].addChild(label_item)
+
+            curr_track.database_add_label(self.tracks_db_fname, self.canvas.selectedShape.uid, self.canvas.selectedShape.label.dt)
+
+            self.trackListWidget.resizeColumnToContents(0)
+            self.trackListWidget.resizeColumnToContents(1)
+
+
+
+    def addTrack(self, curr_track):
+        track_item = HashableQTreeWidgetItem([curr_track.human_readable_name, curr_track.uid, ''])
+        track_item.setFlags(track_item.flags() | Qt.ItemIsUserCheckable)
+        track_item.setCheckState(0, Qt.Unchecked)
+        # item.setBackground(generateColorByText(track.uid))
+        self.trackListWidget.addTopLevelItem(track_item)
+        self.tracks[curr_track.uid] = curr_track
+        curr_track.database_insert_track_info(self.tracks_db_fname)
+        self.TrackItemsToTracks[track_item] = curr_track
+        self.TracksToTrackItems[curr_track] = track_item
+
+        for label in curr_track.labels:
+            label_item = HashableQTreeWidgetItem(['', label['uid'], datetime.strftime(label.dt, DATETIME_FORMAT_STRING)])
+            # label_item.setBackground(generateColorByText(curr_track.uid))
+            track_item.addChild(label_item)
+        track_item.setExpanded(True)
+        self.trackListWidget.resizeColumnToContents(0)
+        self.trackListWidget.resizeColumnToContents(1)
+
+
+
+    def continueExistingTrack(self):
+        if self.canvas.selectedShape:
+            tracks_items = [{'uid': uid, 'track': self.tracks[uid], 'hr_name': self.TracksToTrackItems[self.tracks[uid]].text(0)} for uid in self.tracks.keys()]
+            # trackUIDs = [k for k in self.tracks.keys()]
+            dial = TrackSelectionDialog("Select a track", "List of tracks", tracks_items, self)
+            if dial.exec_() == QDialog.Accepted:
+                selected_track_item = dial.itemsSelected()[0]
+                selected_track = self.tracks[selected_track_item['uid']]
+                selected_track.append_new_label(self.canvas.selectedShape)
+                selected_track.database_update_track_info(self.tracks_db_fname)
+
+                label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_FORMAT_STRING)])
+                self.TracksToTrackItems[selected_track].addChild(label_item)
+            self.trackListWidget.resizeColumnToContents(0)
+            self.trackListWidget.resizeColumnToContents(1)
+
+
+
 
     def createShape(self):
         assert self.beginner()
@@ -762,13 +803,15 @@ class MainWindow(QMainWindow, WindowMixin):
         if not self.canvas.editing():
             return
         item = self.currentItem()
-        text = self.labelDialog.popUp(item.text())
+        text = self.labelDialog.popUp(item.text(0))
         if text is not None:
-            item.setText(text)
-            item.setBackground(generateColorByText(text))
+            item.setText(0, text)
+            item.setRowBackground(generateColorByText(text))
             self.setDirty()
 
-    # Tzutalin 20160906 : Add file list and dock to move faster
+
+
+
     def fileitemDoubleClicked(self, item=None):
         currIndex = self.mImgList.index(ustr(item.text()))
         if currIndex < len(self.mImgList):
@@ -776,16 +819,8 @@ class MainWindow(QMainWindow, WindowMixin):
             if filename:
                 self.loadFile(filename)
 
-    #MK
-    # def basemapListItemDoubleClicked(self, item=None):
-    #     pass
-    #     # currIndex = self.mImgList.index(ustr(item.text()))
-    #     # if currIndex < len(self.mImgList):
-    #     #     filename = self.mImgList[currIndex]
-    #     #     if filename:
-    #     #         self.loadFile(filename)
 
-    # Add chris
+
     def btnstate(self, item= None):
         """ Function to handle difficult examples
         Update on each object """
@@ -823,22 +858,26 @@ class MainWindow(QMainWindow, WindowMixin):
             else:
                 self.labelList.clearSelection()
         self.actions.delete.setEnabled(selected)
-        self.actions.copy.setEnabled(selected)
+        # self.actions.copy.setEnabled(selected)
         self.actions.edit.setEnabled(selected)
         self.actions.shapeLineColor.setEnabled(selected)
         self.actions.shapeFillColor.setEnabled(selected)
 
     def addLabel(self, shape):
         shape.paintLabel = self.paintLabelsOption.isChecked()
-        item = HashableQListWidgetItem(shape.label)
-        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-        item.setCheckState(Qt.Checked)
-        item.setBackground(generateColorByText(shape.label))
+        # item = HashableQListWidgetItem(shape.label.name + ' (' + shape.label.uid + ')')
+        item = HashableQTreeWidgetItem(self.labelList, [shape.label.name, shape.label.uid, datetime.strftime(shape.label.dt, DATETIME_FORMAT_STRING)])
         self.itemsToShapes[item] = shape
         self.shapesToItems[shape] = item
-        self.labelList.addItem(item)
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+        item.setCheckState(0, Qt.Checked)
+        item.setRowBackground(generateColorByText(shape.label.name))
+        # self.labelList.addItem(item)
+        self.labelList.addTopLevelItem(item)
         for action in self.actions.onShapesPresent:
             action.setEnabled(True)
+        self.labelList.resizeColumnToContents(0)
+        self.labelList.resizeColumnToContents(1)
 
     def remLabel(self, shape):
         if shape is None:
@@ -850,44 +889,72 @@ class MainWindow(QMainWindow, WindowMixin):
         del self.itemsToShapes[item]
 
 
-    def loadLabels(self, shapes):
+
+
+
+    def loadLabels(self, labels):
         s = []
 
         # for label, points, latlonPoints, line_color, fill_color, isEllipse in shapes:
-        for label, latlonPoints, line_color, fill_color, isEllipse in shapes:
+        for label in labels:
             shape = Shape(label=label, parent_canvas=self.canvas)
 
             # for (x, y),(lon,lat) in zip(latlonPoints):
-            for (lon, lat) in latlonPoints:
-                x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(lon, lat)
-                # shape.addPoint(QPointF(x_pic, y_pic), QPointF(lon, lat))
-                shape.addPoint(QPointF(x_pic, y_pic), QPointF(lon, lat))
-            shape.difficult = False
-            shape.isEllipse = isEllipse
+            for (pt_name, pt_latlon) in label.pts.items():
+                x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
             shape.close()
             s.append(shape)
-
-            if line_color:
-                shape.line_color = QColor(*line_color)
-            else:
-                shape.line_color = generateColorByText(label)
-
-            if fill_color:
-                shape.fill_color = QColor(*fill_color)
-            else:
-                shape.fill_color = generateColorByText(label)
 
             self.addLabel(shape)
 
         self.canvas.loadShapes(s)
+
+        label_uids = [label.uid for label in labels]
+        # self.loadTracks(label_uids)
+        self.loadTracks()
+
         return
+
+
+    def loadTracks(self):
+        tracks_from_db = read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt)
+        if len(tracks_from_db) > 0:
+            tracks_df = pd.DataFrame(np.array(tracks_from_db), columns=['track_uid', 'label_uid', 'label_dt', 'human_readable_name'])
+            tracks_df['label_dt'] = pd.to_datetime(tracks_df['label_dt'])
+            track_uids = tracks_df['track_uid'].unique()
+            for track_uid in track_uids:
+                if track_uid not in self.tracks.keys():
+                    track_human_readable_name = np.array(tracks_df[tracks_df['track_uid'] == track_uid]['human_readable_name'])[0]
+                    curr_track = Track({'uid': track_uid, 'human_readable_name': track_human_readable_name})
+                    track_labels = tracks_df[tracks_df['track_uid'] == track_uid]
+                    for idx, track_label_row in track_labels.iterrows():
+                        curr_track.append_new_label({'uid': track_label_row['label_uid'], 'dt': track_label_row['label_dt']})
+
+                    track_item = HashableQTreeWidgetItem([curr_track.human_readable_name, curr_track.uid, ''])
+                    track_item.setFlags(track_item.flags() | Qt.ItemIsUserCheckable)
+                    track_item.setCheckState(0, Qt.Unchecked)
+                    track_item.setRowBackground(generateColorByText(curr_track.uid))
+                    self.trackListWidget.addTopLevelItem(track_item)
+                    self.tracks[curr_track.uid] = curr_track
+                    self.TrackItemsToTracks[track_item] = curr_track
+                    self.TracksToTrackItems[curr_track] = track_item
+
+                    for label in curr_track.labels:
+                        label_item = HashableQTreeWidgetItem(['', label['uid'], datetime.strftime(label['dt'], DATETIME_FORMAT_STRING)])
+                        label_item.setRowBackground(generateColorByText(curr_track.uid))
+                        track_item.addChild(label_item)
+                    track_item.setExpanded(True)
+            self.trackListWidget.resizeColumnToContents(0)
+            self.trackListWidget.resizeColumnToContents(1)
+        return
+
 
 
     def saveLabels(self, annotationFilePath):
         annotationFilePath = ustr(annotationFilePath)
         if self.labelFile is None:
             self.labelFile = LabelFile()
-            # self.labelFile.verified = self.canvas.verified
 
         def format_shape(s):
             return dict(label=s.label,
@@ -903,34 +970,11 @@ class MainWindow(QMainWindow, WindowMixin):
             if not ustr(annotationFilePath).endswith(MCC_XML_EXT):
                 annotationFilePath += MCC_XML_EXT
             print ('data: ' + self.filePath + ' -> Its xml: ' + annotationFilePath)
-            self.labelFile.saveArbitraryXMLformat(annotationFilePath, self.canvas.shapes, self.filePath, self.imageData,
-                                                  self.lineColor.getRgb(), self.fillColor.getRgb())
+            self.labelFile.saveArbitraryXMLformat(annotationFilePath, self.canvas.shapes, self.filePath)
             return True
         except LabelFileError as e:
             self.errorMessage(u'Error saving label data', u'<b>%s</b>' % e)
             return False
-
-    def copySelectedShape(self):
-        self.addLabel(self.canvas.copySelectedShape())
-        # fix copy and delete
-        self.shapeSelectionChanged(True)
-
-
-    # def currentCachedBasemapItem(self):
-    #     items = self.basemapsListWidget.selectedItems()
-    #     if items:
-    #         return items[0]
-    #     return None
-
-
-    # def basemapListItemSelectionChanged(self):
-    #     basemapCurrentItem = self.currentCachedBasemapItem()
-    #     if basemapCurrentItem:
-    #         self._noSelectionSlot = True
-    #         self.canvas.selectShape(self.basemapItemsToShapes[basemapCurrentItem])
-    #         shape = self.basemapItemsToShapes[basemapCurrentItem]
-
-
 
     def labelSelectionChanged(self):
         item = self.currentItem()
@@ -938,18 +982,62 @@ class MainWindow(QMainWindow, WindowMixin):
             self._noSelectionSlot = True
             self.canvas.selectShape(self.itemsToShapes[item])
             shape = self.itemsToShapes[item]
-            # Add Chris
-            # self.diffcButton.setChecked(shape.difficult)
+            label = shape.label
+
+            tree_items = get_all_items(self.trackListWidget)
+            tree_items = [{'item': ti, 'uid': ti.text(1)} for ti in tree_items]
+
+            for track_item in tree_items:
+                track_item['item'].setSelected(False)
+
+            found_items = [tree_items[i] for i in [i for i in np.where(np.array([ti['uid'] for ti in tree_items]) == label.uid)[0]]]
+            if found_items:
+                for found_item in found_items:
+                    found_item['item'].setSelected(True)
+
 
     def labelItemChanged(self, item):
         shape = self.itemsToShapes[item]
-        label = item.text()
-        if label != shape.label:
-            shape.label = item.text()
-            shape.line_color = generateColorByText(shape.label)
+        shape_name = item.text(0)
+        if shape.label.name != shape_name:
+            shape.label.name = shape_name
+            shape.line_color = generateColorByText(shape.label.name)
             self.setDirty()
         else:  # User probably changed item visibility
-            self.canvas.setShapeVisible(shape, item.checkState() == Qt.Checked)
+            self.canvas.setShapeVisible(shape, item.checkState(0) == Qt.Checked)
+
+
+    def trackItemChanged(self, curr_item):
+        # load all the shapes of the track
+        if (not curr_item.parent()):
+            # top-level item - is a track
+            # switch off all other top-level items checks
+            # find all the shapes for this track
+            # paint them
+
+            # for track_item in get_all_toplevel_items(self.trackListWidget):
+            #     if track_item != curr_item:
+            #         track_item.setCheckState(0, Qt.Unchecked)
+            curr_track = self.TrackItemsToTracks[curr_item]
+            track_labels_data = read_track_labels_by_track_uid(self.tracks_db_fname, curr_track.uid)
+            track_labels_df = pd.DataFrame(np.array(track_labels_data), columns=['label_uid', 'label_dt'])
+            track_labels_df['label_dt'] = pd.to_datetime(track_labels_df['label_dt'])
+            track_labels_df.sort_values(by = 'label_dt', inplace=True)
+            self.curr_track_shapes = []
+            for idx,label_row in track_labels_df.iterrows():
+                print(label_row)
+
+        # shape = self.itemsToShapes[item]
+        # shape_name = item.text(0)
+        # if shape.label.name != shape_name:
+        #     shape.label.name = shape_name
+        #     shape.line_color = generateColorByText(shape.label.name)
+        #     self.setDirty()
+        # else:  # User probably changed item visibility
+        #     self.canvas.setShapeVisible(shape, item.checkState(0) == Qt.Checked)
+
+
+
 
     # Callback functions:
     def newShape(self):
@@ -991,11 +1079,19 @@ class MainWindow(QMainWindow, WindowMixin):
             # self.canvas.undoLastLine()
             self.canvas.resetAllLines()
 
-
-
-
-
-
+        # MK: set latlon points of the new shape to pts of the label of this shape
+        new_shape = self.canvas.shapes[-1]
+        lon0 = new_shape.latlonPoints[0].x()
+        lat0 = new_shape.latlonPoints[0].y()
+        lon1 = new_shape.latlonPoints[1].x()
+        lat1 = new_shape.latlonPoints[1].y()
+        lon2 = new_shape.latlonPoints[2].x()
+        lat2 = new_shape.latlonPoints[2].y()
+        pt0 = {'lat': lat0, 'lon': lon0}
+        pt1 = {'lat': lat1, 'lon': lon1}
+        pt2 = {'lat': lat2, 'lon': lon2}
+        pts = {'pt0': pt0, 'pt1': pt1, 'pt2': pt2}
+        new_shape.label.pts = pts
 
 
 
@@ -1071,15 +1167,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.zoomMode = self.FIT_WINDOW if value else self.MANUAL_ZOOM
         self.adjustScale()
 
-
-
     def setFitWidth(self, value=True):
         if value:
             self.actions.fitWindow.setChecked(False)
         self.zoomMode = self.FIT_WIDTH if value else self.MANUAL_ZOOM
         self.adjustScale()
-
-
 
     def switchChannel(self):
         newChannel = self.basemaphelper.cycleChannel(perform=True)
@@ -1088,6 +1180,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
 
         self.imageData = self.basemaphelper.CVimageCombined
+        self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
 
         height, width, channel = self.basemaphelper.CVimageCombined.shape
         bytesPerLine = 3 * width
@@ -1097,21 +1190,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.image = image
         self.canvas.loadPixmap(QPixmap.fromImage(image), clearShapes=False)
 
-
-
-
-    # def getSwitchChannelStatusBarString(self):
-    #     if self.basemaphelper:
-    #         return 'Data channel: %s. Will switch to: %s' % (self.basemaphelper.dataToPlot, self.basemaphelper.cycleChannel(perform=False))
-    #     else:
-    #         return u'Switch data channel'
-
-
-
     def refreshBasemapHires(self):
         self.refreshBasemap(hires=True)
-
-
 
     def refreshBasemap(self, hires = False):
         self.labelList.clear()
@@ -1162,32 +1242,19 @@ class MainWindow(QMainWindow, WindowMixin):
         except:
             return None
 
-        # if hires:
-        #     self.basemaphelper.initiate(resolution='h')
-        #     # self.basemaphelper.createBasemapObj(resolution='h')
-        # else:
-        #     self.basemaphelper.initiate(resolution='c')
-        #     # self.basemaphelper.createBasemapObj(resolution='c')
-        # # self.basemaphelper.PlotBasemapBackground()
-        # # self.basemaphelper.PlotDataLayer()
         self.basemaphelper.FuseBasemapWithData()
 
         height, width, channel = self.basemaphelper.CVimageCombined.shape
         bytesPerLine = 3 * width
 
         self.imageData = self.basemaphelper.CVimageCombined
+        self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
         self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
         image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
-
-        # self.labelFile = None
-        # self.canvas.verified = False
 
         self.image = image
         self.canvas.loadPixmap(QPixmap.fromImage(image))
         self.setClean()
-        # if self.labelFile:
-        #     self.loadLabels(self.labelFile.shapes)
-        # else:
         if self.defaultSaveDir is not None:
             basename = os.path.basename(
                 os.path.splitext(self.filePath)[0])
@@ -1205,15 +1272,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.paintCanvas()
 
 
-
-
-
-
-
     def togglePolygons(self, value):
         for item, shape in self.itemsToShapes.items():
             item.setCheckState(Qt.Checked if value else Qt.Unchecked)
-
 
 
     def loadFile(self, filePath=None):
@@ -1246,13 +1307,12 @@ class MainWindow(QMainWindow, WindowMixin):
                     self.status("Error reading %s" % unicodeFilePath)
                     return False
                 self.imageData = self.labelFile.imageData
-                # self.lineColor = QColor(*self.labelFile.lineColor)
-                # self.fillColor = QColor(*self.labelFile.fillColor)
-                # self.canvas.verified = self.labelFile.verified
                 image = QImage.fromData(self.imageData)
             else:
                 # Load image:
                 # read data first and store for saving into label file.
+                self.curr_dt = DateTimeFromDataFName(unicodeFilePath)
+
                 try:
                     if self.preserveBasemapConfig.isChecked() & (self.basemaphelper is not None):
                         self.basemaphelper = read(unicodeFilePath, default = self.basemaphelper)
@@ -1265,18 +1325,11 @@ class MainWindow(QMainWindow, WindowMixin):
                 bytesPerLine = 3 * width
 
                 self.imageData = self.basemaphelper.CVimageCombined
+                self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
                 self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
                 image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
 
                 self.labelFile = None
-                # self.canvas.verified = False
-
-                # self.basemaphelper.listAvailablePickledBasemapObjects()
-                # for bmFilePath in self.basemaphelper.df_pickled_basemaps_list.bm_fname:
-                #     item = QListWidgetItem(bmFilePath)
-                #     self.basemapsListWidget.addItem(item)
-                # self.loadPickledBasemaps()
-
 
             # image = QImage.fromData(self.imageData)
             if image.isNull():
@@ -1318,13 +1371,16 @@ class MainWindow(QMainWindow, WindowMixin):
             self.setWindowTitle(__appname__ + ' ' + filePath)
 
             # Default : select last item if there is at least one item
-            if self.labelList.count():
-                self.labelList.setCurrentItem(self.labelList.item(self.labelList.count()-1))
-                self.labelList.item(self.labelList.count()-1).setSelected(True)
+            if self.labelList.topLevelItemCount():
+                self.labelList.setCurrentItem(self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1))
+                self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1).setSelected(True)
+
+            # self.canvas.curr_dt = DateTimeFromDataFName(unicodeFilePath)
 
             self.canvas.setFocus(True)
             return True
         return False
+
 
     def resizeEvent(self, event):
         if self.canvas and not self.image.isNull()\
@@ -1397,19 +1453,7 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.mayContinue():
             self.loadFile(filename)
 
-    def scanAllImages(self, folderPath):
-        # extensions = ['.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
-        extensions = ['.nc']
-        srcdatafiles = []
 
-        for root, dirs, files in os.walk(folderPath):
-            for file in files:
-                if file.lower().endswith(tuple(extensions)):
-                    relativePath = os.path.join(root, file)
-                    path = ustr(os.path.abspath(relativePath))
-                    srcdatafiles.append(path)
-        srcdatafiles.sort(key=lambda x: x.lower())
-        return srcdatafiles
 
     def changeSavedirDialog(self, _value=False):
         if self.defaultSaveDir is not None:
@@ -1467,29 +1511,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.dirname = dirpath
         self.filePath = None
         self.fileListWidget.clear()
-        self.mImgList = self.scanAllImages(dirpath)
-        # self.openNextImg()
+        self.mImgList = find_files(dirpath, '*.nc')
+        self.mImgList = SortFNamesByDateTime(self.mImgList)
         for imgPath in self.mImgList:
             item = QListWidgetItem(imgPath)
             self.fileListWidget.addItem(item)
-
-    # def verifyImg(self, _value=False):
-    #     # Proceding next image without dialog if having any label
-    #      if self.filePath is not None:
-    #         try:
-    #             self.labelFile.toggleVerify()
-    #         except AttributeError:
-    #             # If the labelling file does not exist yet, create if and
-    #             # re-save it with the verified attribute.
-    #             self.saveFile()
-    #             if self.labelFile != None:
-    #                 self.labelFile.toggleVerify()
-    #             else:
-    #                 return
-    #
-    #         self.canvas.verified = self.labelFile.verified
-    #         self.paintCanvas()
-    #         self.saveFile()
 
     def openPrevImg(self, _value=False):
         # Proceding prev image without dialog if having any label
@@ -1567,6 +1593,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 filename = filename[0]
             self.loadFile(filename)
 
+
     def saveFile(self, _value=False):
         if self.defaultSaveDir is not None and len(ustr(self.defaultSaveDir)):
             if self.filePath:
@@ -1579,8 +1606,8 @@ class MainWindow(QMainWindow, WindowMixin):
             imgFileName = os.path.basename(self.filePath)
             savedFileName = os.path.splitext(imgFileName)[0]
             savedPath = os.path.join(imgFileDir, savedFileName)
-            self._saveFile(savedPath if self.labelFile
-                           else self.saveFileDialog())
+            self._saveFile(savedPath if self.labelFile else self.saveFileDialog())
+
 
     def saveFileAs(self, _value=False):
         assert not self.image.isNull(), "cannot save empty image"
@@ -1672,13 +1699,14 @@ class MainWindow(QMainWindow, WindowMixin):
             self.canvas.update()
             self.setDirty()
 
-    def copyShape(self):
-        self.canvas.endMove(copy=True)
-        self.addLabel(self.canvas.selectedShape)
-        self.setDirty()
+    # def copyShape(self):
+    #     self.canvas.endMove(copy=True)
+    #     self.addLabel(self.canvas.selectedShape)
+    #     self.setDirty()
 
     def moveShape(self):
-        self.canvas.endMove(copy=False)
+        # self.canvas.endMove(copy=False)
+        self.canvas.endMove()
         self.setDirty()
 
     def loadPredefinedClasses(self, predefClassesFile):
@@ -1691,7 +1719,6 @@ class MainWindow(QMainWindow, WindowMixin):
                     else:
                         self.labelHist.append(line)
 
-
     def loadArbitraryXMLByFilename(self, xmlPath):
         if self.filePath is None:
             return
@@ -1699,8 +1726,9 @@ class MainWindow(QMainWindow, WindowMixin):
             return
 
         MCCxmlParseReader = ArbitraryXMLReader(xmlPath)
-        shapes = MCCxmlParseReader.getShapes()
-        self.loadLabels(shapes)
+        # shapes = MCCxmlParseReader.getShapes()
+        labels_loaded = MCCxmlParseReader.labels
+        self.loadLabels(labels_loaded)
         # self.canvas.verified = MCCxmlParseReader.verified
 
 
