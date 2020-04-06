@@ -48,7 +48,11 @@ UPDATE_TRACK_END_DT_QUERY_TEXT = '''UPDATE tracks SET end_dt = strftime("%%Y-%%m
 
 DELETE_LABELS_OF_TRACK_QUERY_TEXT = '''DELETE FROM track_labels WHERE track_labels.track_id IN (SELECT id FROM tracks tr WHERE tr.track_uid = "%s")'''
 
-SELECT_LABELS_OF_TRACK_QUERY_TEXT = '''SELECT label_uid,strftime("%%Y-%%m-%%dT%%H:%%M:%%S",dt) FROM track_labels WHERE track_labels.track_id IN (SELECT id FROM tracks tr WHERE tr.track_uid = "%s")'''
+SELECT_LABELS_OF_TRACK_QUERY_TEXT = '''SELECT labs.* FROM track_labels trlabs ''' + \
+                                    '''     INNER JOIN tracks tr ON tr.id = trlabs.track_id ''' + \
+                                    '''     INNER JOIN labels labs ON labs.id = trlabs.label_id ''' + \
+                                    '''     WHERE tr.track_uid = "%s" ''' + \
+                                    '''     ORDER BY labs.dt'''
 
 DELETE_TRACK_QUERY_TEXT = '''DELETE FROM tracks WHERE tracks.track_uid = "%s"'''
 
@@ -64,13 +68,14 @@ TEST_SQLITE_DB_CONNECTION_QUERY_TEXT = '''SELECT * FROM labels labs ''' + \
                                        '''ORDER BY RANDOM() LIMIT 1'''
 
 
-SELECT_TRACKS_BY_LABELS_QUERY_TEXT = '''SELECT tr.track_uid, lab.label_uid, lab.dt FROM tracks tr ''' + \
-                                     '''    INNER JOIN track_labels lab ON tr.id = lab.track_id ''' + \
-                                     '''    WHERE tr.id IN (''' + \
-                                     '''                    SELECT tr1.id from tracks tr1 ''' + \
-                                     '''                        INNER JOIN track_labels lab1 ON tr1.id = lab1.track_id ''' + \
-                                     '''                        WHERE lab1.label_uid IN (%s))''' + \
-                                     '''    ORDER BY tr.track_uid'''
+SELECT_TRACKS_BY_LABEL_UIDS_QUERY_TEXT = '''SELECT tr.track_uid, tr.human_readable_name, labs.* FROM track_labels trlabs ''' + \
+                                         '''    INNER JOIN tracks tr ON tr.id = trlabs.track_id ''' + \
+                                         '''    INNER JOIN labels labs ON labs.id = trlabs.label_id ''' + \
+                                         '''    WHERE tr.id IN (    SELECT DISTINCT trlabs1.track_id FROM track_labels trlabs1 ''' + \
+                                         '''                        INNER JOIN tracks tr1 ON tr1.id = trlabs1.track_id ''' + \
+                                         '''                        INNER JOIN labels labs1 ON labs1.id = trlabs1.label_id ''' + \
+                                         '''                        WHERE labs1.label_uid IN (%s)) ''' + \
+                                         '''    ORDER BY tr.track_uid, labs.dt'''
 
 
 SELECT_TRACKS_BY_DATETIME_RANGE_QUERY_TEXT = '''SELECT tr.track_uid, tr.human_readable_name, labs.* FROM track_labels trlabs ''' + \

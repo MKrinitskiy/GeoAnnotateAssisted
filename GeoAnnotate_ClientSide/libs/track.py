@@ -54,6 +54,8 @@ class Track():
             for curr_label in self.labels:
                 DatabaseOps.insert_label_data(db_fname, curr_label)
                 DatabaseOps.insert_track_label_entry(db_fname, self, curr_label)
+            return True
         except Exception as ex:
             ReportException('./errors.log', ex)
             print('Failed executing sqlite query')
+            return False

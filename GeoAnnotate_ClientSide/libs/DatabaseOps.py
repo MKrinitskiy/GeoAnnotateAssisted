@@ -60,12 +60,12 @@ class DatabaseOps():
 
 
     @classmethod
-    def read_tracks_by_labels(cls, db_fname, labels_uids):
+    def read_tracks_by_label_uids(cls, db_fname, labels_uids):
         try:
             with sqlite3.connect(db_fname) as conn:
                 c = conn.cursor()
                 labels_uid_list = ",".join(['\"' + uid + '\"' for uid in labels_uids])
-                q_result = c.execute(SELECT_TRACKS_BY_LABELS_QUERY_TEXT % labels_uid_list)
+                q_result = c.execute(SELECT_TRACKS_BY_LABEL_UIDS_QUERY_TEXT % labels_uid_list)
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
@@ -136,6 +136,7 @@ class DatabaseOps():
                 return rows_affected if rows_affected>0 else True
         except Exception as ex:
             ReportException('./errors.log', ex)
+            # raise ex
             return False
         return
 
@@ -220,3 +221,4 @@ class DatabaseOps():
                                                                            '%.14f' % label.pts['pt2']['lon'],
                                                                            '%.14f' % label.pts['pt2']['lat'],
                                                                            label.uid))
+            return False

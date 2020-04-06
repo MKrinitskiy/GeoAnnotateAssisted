@@ -23,3 +23,4 @@ from .ustr import ustr
 from .version import __version__
 from .xml_io import *
 from .zoomWidget import ZoomWidget
+from .WarningMessage import *

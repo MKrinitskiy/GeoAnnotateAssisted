@@ -681,16 +681,28 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def startNewTrack(self):
         if self.canvas.selectedShape:
-            curr_track = Track()
-            self.addTrack(curr_track)
-            curr_track.append_new_label(self.canvas.selectedShape)
-            label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
-            self.TracksToTrackItems[curr_track].addChild(label_item)
+            curr_label_track_data = DatabaseOps.read_tracks_by_label_uids(self.tracks_db_fname, [self.canvas.selectedShape.label.uid])
+            if len(curr_label_track_data) > 0:
+                # there is a track which this label belongs to
+                DisplayWarning("SORRY, we cannot do this.",
+                               "WARNING! There is already a track which this label belongs to.\nOne cannot assign a label to more than one track.",
+                               "label UID: %s\nTrack UID: %s" % (self.canvas.selectedShape.label.uid, curr_label_track_data[0][0]))
+                return
+            else:
+                curr_track = Track()
+                self.addTrack(curr_track)
+                curr_track.append_new_label(self.canvas.selectedShape)
+                label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
+                self.TracksToTrackItems[curr_track].addChild(label_item)
 
-            curr_track.database_insert_track_info(self.tracks_db_fname)
+                if curr_track.database_insert_track_info(self.tracks_db_fname):
+                    self.setClean()
+                else:
+                    DisplayWarning('OOPS', 'Something went wrong!', 'Some of the new track data were not written to the database.\nPlease refer to the "errors.log" file and make the developer know about the error.')
+                    self.setDirty()
 
-            self.trackListWidget.resizeColumnToContents(0)
-            self.trackListWidget.resizeColumnToContents(1)
+                self.trackListWidget.resizeColumnToContents(0)
+                self.trackListWidget.resizeColumnToContents(1)
 
 
     def addTrack(self, curr_track):
@@ -714,19 +726,28 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def continueExistingTrack(self):
         if self.canvas.selectedShape:
-            tracks_items = [{'uid': uid, 'track': self.tracks[uid], 'hr_name': self.TracksToTrackItems[self.tracks[uid]].text(0)} for uid in self.tracks.keys()]
-            # trackUIDs = [k for k in self.tracks.keys()]
-            dial = TrackSelectionDialog("Select a track", "List of tracks", tracks_items, self)
-            if dial.exec_() == QDialog.Accepted:
-                selected_track_item = dial.itemsSelected()[0]
-                selected_track = self.tracks[selected_track_item['uid']]
-                selected_track.append_new_label(self.canvas.selectedShape)
-                selected_track.database_update_track_info(self.tracks_db_fname)
+            curr_label_track_data = DatabaseOps.read_tracks_by_label_uids(self.tracks_db_fname, [self.canvas.selectedShape.label.uid])
+            if len(curr_label_track_data) > 0:
+                # there is a track which this label belongs to
+                DisplayWarning("SORRY, we cannot do this.",
+                               "WARNING! There is already a track which this label belongs to.\nOne cannot assign a label to more than one track.",
+                               "label UID: %s\nTrack UID: %s" % (self.canvas.selectedShape.label.uid, curr_label_track_data[0][0]))
 
-                label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
-                self.TracksToTrackItems[selected_track].addChild(label_item)
-            self.trackListWidget.resizeColumnToContents(0)
-            self.trackListWidget.resizeColumnToContents(1)
+                return
+            else:
+                tracks_items = [{'uid': uid, 'track': self.tracks[uid], 'hr_name': self.TracksToTrackItems[self.tracks[uid]].text(0)} for uid in self.tracks.keys()]
+                # trackUIDs = [k for k in self.tracks.keys()]
+                dial = TrackSelectionDialog("Select a track", "List of tracks", tracks_items, self)
+                if dial.exec_() == QDialog.Accepted:
+                    selected_track_item = dial.itemsSelected()[0]
+                    selected_track = self.tracks[selected_track_item['uid']]
+                    selected_track.append_new_label(self.canvas.selectedShape)
+                    selected_track.database_update_track_info(self.tracks_db_fname)
+
+                    label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
+                    self.TracksToTrackItems[selected_track].addChild(label_item)
+                self.trackListWidget.resizeColumnToContents(0)
+                self.trackListWidget.resizeColumnToContents(1)
 
 
 
@@ -934,7 +955,10 @@ class MainWindow(QMainWindow, WindowMixin):
         try:
             for shape in self.canvas.shapes:
                 curr_label = shape.label
-                DatabaseOps.insert_label_data(self.tracks_db_fname, curr_label)
+                if DatabaseOps.insert_label_data(self.tracks_db_fname, curr_label):
+                    self.setClean()
+                else:
+                    DisplayWarning('OOPS', 'Something went wrong!', 'Some of labels were not written to the database.\nPlease refer to the "errors.log" file and make the developer know about the error.')
             return True
         except Exception as ex:
             ReportException('./errors.log', ex)
@@ -969,10 +993,11 @@ class MainWindow(QMainWindow, WindowMixin):
             shape.line_color = generateColorByText(shape.label.name)
             self.setDirty()
             res = DatabaseOps.update_label(self.tracks_db_fname, shape.label)
-            if not res:
-                print('WARNING! the label was not updated in the database. Please refer to the errors.log file for details.')
-            else:
+            if res:
                 self.setClean()
+            else:
+                DisplayWarning('OOPS', 'Something went wrong!',
+                               'The label updates were not written to the database for some reason.\nPlease refer to the "errors.log" file and make the developer know about the error.')
         else:  # User probably changed item visibility
             self.canvas.setShapeVisible(shape, item.checkState(0) == Qt.Checked)
 
@@ -980,32 +1005,38 @@ class MainWindow(QMainWindow, WindowMixin):
     def trackItemChanged(self, curr_item):
         # load all the shapes of the track
         if (not curr_item.parent()):
-            # then it is a top-level item - and it is a track
-            # switch off all other top-level items checks
-            # find all the shapes for this track
-            # paint them
-
-            # for track_item in get_all_toplevel_items(self.trackListWidget):
-            #     if track_item != curr_item:
-            #         track_item.setCheckState(0, Qt.Unchecked)
-            curr_track = self.TrackItemsToTracks[curr_item]
-            track_labels_data = read_track_labels_by_track_uid(self.tracks_db_fname, curr_track.uid)
-            track_labels_df = pd.DataFrame(np.array(track_labels_data), columns=['label_uid', 'label_dt'])
-            track_labels_df['label_dt'] = pd.to_datetime(track_labels_df['label_dt'])
-            track_labels_df.sort_values(by = 'label_dt', inplace=True)
-            self.curr_track_shapes = []
-            for idx,label_row in track_labels_df.iterrows():
-                print(label_row)
-
-        # shape = self.itemsToShapes[item]
-        # shape_name = item.text(0)
-        # if shape.label.name != shape_name:
-        #     shape.label.name = shape_name
-        #     shape.line_color = generateColorByText(shape.label.name)
-        #     self.setDirty()
-        # else:  # User probably changed item visibility
-        #     self.canvas.setShapeVisible(shape, item.checkState(0) == Qt.Checked)
-
+            if curr_item.checkState(0) == Qt.Checked:
+                self.temporary_shapes = []
+    
+                # for track_item in get_all_toplevel_items(self.trackListWidget):
+                #     if track_item != curr_item:
+                #         track_item.setCheckState(0, Qt.Unchecked)
+                curr_track = self.TrackItemsToTracks[curr_item]
+                track_labels_data = DatabaseOps.read_track_labels_by_track_uid(self.tracks_db_fname, curr_track.uid)
+                track_labels_df = pd.DataFrame(np.array(track_labels_data), columns=['label_id', 'label_uid', 'label_dt', 'label_name', 'lon0', 'lat0', 'lon1', 'lat1', 'lon2', 'lat2', 'sourcedata_fname'])
+                track_labels_df['label_dt'] = pd.to_datetime(track_labels_df['label_dt'])
+                track_labels_df.sort_values(by = 'label_dt', inplace=True)
+                self.curr_track_shapes = []
+                for idx,label_row in track_labels_df.iterrows():
+                    curr_label = MCSlabel.from_db_row_dict(label_row.to_dict())
+                    shape = Shape(label=curr_label, parent_canvas=self.canvas)
+                    for (pt_name, pt_latlon) in curr_label.pts.items():
+                        x_pic, y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                        shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
+                    shape.close()
+                    self.temporary_shapes.append(shape)
+    
+                self.canvas.shapes.extend(self.temporary_shapes)
+                self.canvas.current = None
+                self.canvas.repaint()
+            else:
+                # remove all temporary shapes from canvas
+                for tmp_shape in self.temporary_shapes:
+                    self.canvas.shapes.remove(tmp_shape)
+                    self.canvas.current = None
+                    self.canvas.repaint()
+                self.temporary_shapes.clear()
+                self.temporary_shapes = None
 
 
 
@@ -1063,7 +1094,11 @@ class MainWindow(QMainWindow, WindowMixin):
         pts = {'pt0': pt0, 'pt1': pt1, 'pt2': pt2}
         new_shape.label.pts = pts
         new_shape.label.sourcedata_fname = os.path.basename(self.filePath)
-        DatabaseOps.insert_label_data(self.tracks_db_fname, new_shape.label)
+        if DatabaseOps.insert_label_data(self.tracks_db_fname, new_shape.label):
+            self.setClean()
+        else:
+            DisplayWarning('OOPS', 'Something went wrong!',
+                           'The new label was not written to the database for some reason.\nPlease refer to the "errors.log" file and make the developer know about the error.')
 
 
 
@@ -1250,17 +1285,21 @@ class MainWindow(QMainWindow, WindowMixin):
         self.image = image
         self.canvas.loadPixmap(QPixmap.fromImage(image))
         self.setClean()
-        if self.defaultSaveDir is not None:
-            basename = os.path.basename(
-                os.path.splitext(self.filePath)[0])
-            MCCXMLPath = os.path.join(self.defaultSaveDir, basename + MCC_XML_EXT)
+        # if self.defaultSaveDir is not None:
+        #     basename = os.path.basename(
+        #         os.path.splitext(self.filePath)[0])
+        #     MCCXMLPath = os.path.join(self.defaultSaveDir, basename + MCC_XML_EXT)
+        #
+        #     if os.path.isfile(MCCXMLPath):
+        #         self.loadArbitraryXMLByFilename(MCCXMLPath)
+        # else:
+        #     MCCXMLPath = os.path.splitext(self.basemaphelper.dataSourceFile)[0] + MCC_XML_EXT
+        #     if os.path.isfile(MCCXMLPath):
+        #         self.loadArbitraryXMLByFilename(MCCXMLPath)
 
-            if os.path.isfile(MCCXMLPath):
-                self.loadArbitraryXMLByFilename(MCCXMLPath)
-        else:
-            MCCXMLPath = os.path.splitext(self.basemaphelper.dataSourceFile)[0] + MCC_XML_EXT
-            if os.path.isfile(MCCXMLPath):
-                self.loadArbitraryXMLByFilename(MCCXMLPath)
+        labels_from_database = MCSlabel.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
+        self.loadLabels(labels_from_database)
+
 
         self.canvas.setEnabled(True)
         self.adjustScale(initial=True)
