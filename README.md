@@ -10,6 +10,7 @@ Modifications were made in order to fit the current problem requirements:
 - Labels of an elliptic form;
 - Source data in NetCDF format which have to be projected;
 - Various scales of this projection.
+- (2020-04 update) tracking features added
 
 Client-server version was developed in order to address low performance of client-side PC.
 
