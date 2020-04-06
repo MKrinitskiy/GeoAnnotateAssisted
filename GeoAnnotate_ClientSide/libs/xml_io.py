@@ -142,6 +142,7 @@ class ArbitraryXMLReader:
         assert self.filepath.endswith(MCC_XML_EXT), "Unsupported file format"
         parser = etree.XMLParser(encoding=ENCODE_METHOD)
         xmltree = ElementTree.parse(self.filepath, parser=parser).getroot()
+        sourcedata_fname = os.path.basename(xmltree.findall('filename')[0].text)
 
         for object_iter in xmltree.findall('object'):
             ellipse = object_iter.find("ellipse")
@@ -190,5 +191,5 @@ class ArbitraryXMLReader:
 
             # self.addLabel(label_name, ellipse, uid, dt)
             # self.addLabel(MCSlabel(label_name, uid, dt, pts))
-            self.labels.append(MCSlabel(label_name, uid, dt, pts))
+            self.labels.append(MCSlabel(label_name, uid, dt, pts, sourcedata_fname))
         return True

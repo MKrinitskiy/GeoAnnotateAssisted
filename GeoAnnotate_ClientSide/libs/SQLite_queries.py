@@ -1,8 +1,8 @@
-CREATE_TRACKS_TABLE = '''CREATE TABLE tracks (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, ''' + \
-                      '''                     track_uid TEXT NOT NULL UNIQUE, ''' + \
-                      '''                     start_dt TEXT, ''' + \
-                      '''                     end_dt TEXT, ''' + \
-                      '''                     human_readable_name TEXT NOT NULL)'''
+CREATE_TRACKS_TABLE_QUERY_TEXT = '''CREATE TABLE tracks (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, ''' + \
+                                 '''                     track_uid TEXT NOT NULL UNIQUE, ''' + \
+                                 '''                     start_dt TEXT, ''' + \
+                                 '''                     end_dt TEXT, ''' + \
+                                 '''                     human_readable_name TEXT NOT NULL)'''
 
 # CREATE_TRACK_LABELS_TABLE = '''CREATE TABLE track_labels (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, ''' + \
 #                             '''                           label_uid TEXT NOT NULL UNIQUE, ''' + \
@@ -16,27 +16,39 @@ CREATE_TRACKS_TABLE = '''CREATE TABLE tracks (id INTEGER NOT NULL PRIMARY KEY AU
 #                             '''                           lat1 REAL NOT NULL, ''' + \
 #                             '''                           lon2 REAL NOT NULL, ''' + \
 #                             '''                           lat2 REAL NOT NULL)'''
-CREATE_TRACK_LABELS_TABLE = '''CREATE TABLE track_labels (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, ''' + \
-                            '''                           label_uid TEXT NOT NULL UNIQUE, ''' + \
-                            '''                           track_id INTEGER NOT NULL, ''' + \
-                            '''                           dt TEXT NOT NULL, ''' + \
-                            '''                           name TEXT NOT NULL, ''' + \
-                            '''                           lon0 REAL NOT NULL, ''' + \
-                            '''                           lat0 REAL NOT NULL, ''' + \
-                            '''                           lon1 REAL NOT NULL, ''' + \
-                            '''                           lat1 REAL NOT NULL, ''' + \
-                            '''                           lon2 REAL NOT NULL, ''' + \
-                            '''                           lat2 REAL NOT NULL)'''
+CREATE_LABELS_TABLE_QUERY_TEXT = '''CREATE TABLE labels (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, ''' + \
+                                 '''               label_uid TEXT NOT NULL UNIQUE, ''' + \
+                                 '''               dt TEXT NOT NULL, ''' + \
+                                 '''               name TEXT NOT NULL, ''' + \
+                                 '''               lon0 REAL NOT NULL, ''' + \
+                                 '''               lat0 REAL NOT NULL, ''' + \
+                                 '''               lon1 REAL NOT NULL, ''' + \
+                                 '''               lat1 REAL NOT NULL, ''' + \
+                                 '''               lon2 REAL NOT NULL, ''' + \
+                                 '''               lat2 REAL NOT NULL, ''' + \
+                                 '''               sourcedata_fname TEXT NOT NULL)'''
+
+
+CREATE_TRACK_LABELS_QUERY_TEXT = '''CREATE TABLE track_labels (label_id INTEGER NOT NULL, ''' + \
+                                 '''                           track_id INTEGER NOT NULL)'''
+
 
 INSERT_TRACK_QUERY_TEXT = '''INSERT OR IGNORE INTO tracks (track_uid, human_readable_name) ''' + \
-                          '''       VALUES ("%s", "%s")'''
+                          '''                      VALUES ("%s", "%s")'''
 
 # INSERT_LABEL_QUERY_TEXT = '''INSERT INTO track_labels (label_uid, track_id, prev_label_uid, dt) ''' + \
 #                           '''       SELECT "%s", tr.id, "%s", "%s" FROM  tracks tr ''' + \
 #                           '''       WHERE tr.track_uid = "%s"'''
-INSERT_LABEL_QUERY_TEXT = '''INSERT INTO track_labels (label_uid, track_id, dt) ''' + \
-                          '''       SELECT "%s", tr.id, "%s", "%s" FROM  tracks tr ''' + \
-                          '''       WHERE tr.track_uid = "%s"'''
+
+
+INSERT_LABEL_QUERY_TEXT = '''INSERT OR IGNORE INTO labels (label_uid, dt, name, lon0, lat0, lon1, lat1, lon2, lat2, sourcedata_fname) ''' + \
+                          '''                      VALUES ("%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s")'''
+
+
+INSERT_TRACK_LABEL_QUERY_TEXT = '''INSERT INTO track_labels (label_id, track_id) ''' + \
+                                '''     SELECT labs.id AS label_id, trks.id AS track_id FROM labels labs JOIN tracks trks ''' + \
+                                '''     WHERE labs.label_uid = "%s" ''' + \
+                                '''     AND trks.track_uid = "%s"'''
 
 UPDATE_TRACK_START_DT_QUERY_TEXT = '''UPDATE tracks SET start_dt = strftime("%%Y-%%m-%%dT%%H:%%M:%%S", (SELECT min(d1.dt) as dt_min FROM ''' + \
                                    '''    (SELECT datetime(dt) as dt FROM track_labels WHERE track_labels.track_id IN ''' + \
@@ -68,8 +80,7 @@ SELECT_TRACKS_QUERY_TEXT = '''SELECT tr.track_uid, lab.label_uid from track_labe
                            ''' INNER JOIN tracks tr ON tr.id = lab.track_id ''' + \
                            ''' ORDER BY tr.track_uid '''
 
-TEST_SQLITE_DB_CONNECTION_QUERY_TEXT = '''SELECT * FROM track_labels labs ''' + \
-                                       '''INNER JOIN tracks tr ON labs.track_id = tr.id ''' + \
+TEST_SQLITE_DB_CONNECTION_QUERY_TEXT = '''SELECT * FROM labels labs ''' + \
                                        '''ORDER BY RANDOM() LIMIT 1'''
 
 
@@ -95,13 +106,14 @@ SELECT_TRACKS_BY_LABELS_QUERY_TEXT = '''SELECT tr.track_uid, lab.label_uid, lab.
 #                                               '''        INNER JOIN track_labels lab1 ON tr1.id = lab1.track_id ''' + \
 #                                               '''        WHERE lab1.dt BETWEEN "%s" AND "%s") ''' + \
 #                                               '''    ORDER BY tr.track_uid''')
-SELECT_TRACKS_BY_DATETIME_RANGE_QUERY_TEXT = ('''SELECT tr.track_uid, lab.label_uid, lab.dt, tr.human_readable_name FROM tracks tr ''' + \
-                                              '''    INNER JOIN track_labels lab ON tr.id = lab.track_id ''' + \
-                                              '''    WHERE tr.id IN (''' + \
-                                              '''        SELECT tr1.id from tracks tr1 ''' + \
-                                              '''        INNER JOIN track_labels lab1 ON tr1.id = lab1.track_id ''' + \
-                                              '''        WHERE lab1.dt BETWEEN "%s" AND "%s") ''' + \
-                                              '''    ORDER BY tr.track_uid''')
+SELECT_TRACKS_BY_DATETIME_RANGE_QUERY_TEXT = '''SELECT tr.track_uid, tr.human_readable_name, lab.*  FROM tracks tr ''' + \
+                                             '''    INNER JOIN track_labels lab ON tr.id = lab.track_id ''' + \
+                                             '''    WHERE tr.id IN (''' + \
+                                             '''        SELECT tr1.id from tracks tr1 ''' + \
+                                             '''        INNER JOIN track_labels lab1 ON tr1.id = lab1.track_id ''' + \
+                                             '''        WHERE lab1.dt BETWEEN "%s" AND "%s") ''' + \
+                                             '''    ORDER BY tr.track_uid'''
 
+SELECT_LABELS_BY_SOURCEDATA_BASENAME = '''SELECT * FROM labels WHERE labels.sourcedata_fname = "%s"'''
 
 DATETIME_FORMAT_STRING = '%Y-%m-%dT%H:%M:%S'

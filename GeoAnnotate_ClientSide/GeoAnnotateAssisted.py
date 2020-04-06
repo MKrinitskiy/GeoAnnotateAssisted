@@ -51,31 +51,7 @@ except ImportError:
     from PyQt4.QtCore import *
 #endregion
 
-#region Add internal libs
-from libs.constants import *
-from libs.lib import struct, newAction, newIcon, addActions, fmtShortcut, generateColorByText
-from libs.settings import Settings
-from libs.shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR
-from libs.canvas import Canvas
-from libs.zoomWidget import ZoomWidget
-from libs.labelDialog import LabelDialog
-from libs.colorDialog import ColorDialog
-from libs.labelFile import LabelFile, LabelFileError
-from libs.toolBar import ToolBar
-from libs.xml_io import *
-from libs.ustr import ustr
-from libs.version import __version__
-from libs.HashableQListWidgetItem import HashableQListWidgetItem
-from libs.HashableQTreeWidgetItem import HashableQTreeWidgetItem
-from libs.TrackingBasemapHelper import *
-from libs.TrackSelectionDialog import TrackSelectionDialog
-from libs.tracks_database_ops import *
-from libs.track import *
-from libs.ServiceDefs import *
-from libs.QTreeWidgetFunctions import *
-from libs.SQLite_queries import *
-from libs.horsephrase_implementation import generate_horsephrase
-#endregion
+from libs import *
 
 
 
@@ -116,7 +92,7 @@ class MainWindow(QMainWindow, WindowMixin):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
 
-        LabelFile.suffix = MCC_XML_EXT
+        # LabelFile.suffix = MCC_XML_EXT
         self.basemaphelper = None
         self.trackingFunctionsAvailable = False
 
@@ -132,6 +108,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.dirname = None
         self.labelHist = []
         self.lastOpenDir = None
+
+        self.curr_dt = datetime.now()
 
         # Whether we need to save or not.
         self.dirty = False
@@ -231,11 +209,13 @@ class MainWindow(QMainWindow, WindowMixin):
         #endregion
         self.addDockWidget(Qt.RightDockWidgetArea, self.filedock)
 
+        self.currently_opened_source_file = None
+
         self.zoomWidget = ZoomWidget()
         self.colorDialog = ColorDialog(parent=self)
 
         self.canvas = Canvas(parent=self)
-        self.canvas.zoomRequest.connect(self.zoomRequest)
+        self.canvas.zoomRequest.connect(self.zoomRequestCallback)
 
         scroll = QScrollArea()
         scroll.setWidget(self.canvas)
@@ -245,9 +225,9 @@ class MainWindow(QMainWindow, WindowMixin):
             Qt.Horizontal: scroll.horizontalScrollBar()
         }
         self.scrollArea = scroll
-        self.canvas.scrollRequest.connect(self.scrollRequest)
+        self.canvas.scrollRequest.connect(self.scrollRequestCallback)
 
-        self.canvas.newShape.connect(self.newShape)
+        self.canvas.newShape.connect(self.newShapeCallback)
         self.canvas.shapeMoved.connect(self.setDirty)
         self.canvas.selectionChanged.connect(self.shapeSelectionChanged)
         self.canvas.drawingPolygon.connect(self.toggleDrawingSensitive)
@@ -265,11 +245,11 @@ class MainWindow(QMainWindow, WindowMixin):
         opendir = action('&Open Dir', self.openDirDialog,
                          'Ctrl+u', 'open', u'Open Dir')
 
-        changeSavedir = action('&Change Save Dir', self.changeSavedirDialog,
-                               'Ctrl+r', 'open', u'Change default saved Annotation dir')
+        # changeSavedir = action('&Change Save Dir', self.changeSavedirDialog,
+        #                        'Ctrl+r', 'open', u'Change default saved Annotation dir')
 
-        openAnnotation = action('&Open Annotation', self.openAnnotationDialog,
-                                'Ctrl+Shift+O', 'open', u'Open Annotation')
+        # openAnnotation = action('&Open Annotation', self.openAnnotationDialog,
+        #                         'Ctrl+Shift+O', 'open', u'Open Annotation')
 
         openNextImg = action('Next file', self.openNextImg,
                              'd', 'next', u'Open Next')
@@ -283,8 +263,8 @@ class MainWindow(QMainWindow, WindowMixin):
         save = action('&Save', self.saveFile,
                       'Ctrl+S', 'save', u'Save labels to file', enabled=False)
 
-        saveAs = action('&Save As', self.saveFileAs,
-                        'Ctrl+Shift+S', 'save-as', u'Save labels to a different file', enabled=False)
+        # saveAs = action('&Save As', self.saveFileAs,
+        #                 'Ctrl+Shift+S', 'save-as', u'Save labels to a different file', enabled=False)
 
         close = action('&Close', self.closeFile, 'Ctrl+W', 'close', u'Close current file')
 
@@ -403,7 +383,7 @@ class MainWindow(QMainWindow, WindowMixin):
         #                       onLoadActive=(close, create, createMode, editMode),
         #                       onShapesPresent=(saveAs, hideAll, showAll),
         #                       switchDataChannel=switchDataChannel)
-        self.actions = struct(save=save, saveAs=saveAs, open=open, close=close,
+        self.actions = struct(save=save, open=open, close=close,
                               resetAll=resetAll,
                               lineColor=color1, create=create, delete=delete, edit=edit,
                               createMode=createMode, editMode=editMode, advancedMode=advancedMode,
@@ -413,14 +393,14 @@ class MainWindow(QMainWindow, WindowMixin):
                               zoomActions=zoomActions,
                               refreshBasemap=zoomReplotBasemap,
                               zoomHires=zoomIncreaseResolution,
-                              fileMenuActions=(open, opendir, save, saveAs, close, resetAll, quit),
+                              fileMenuActions=(open, opendir, save, close, resetAll, quit),
                               beginner=(),
                               advanced=(),
                               editMenu=(edit, delete, None, color1),
                               beginnerContext=(create, edit, delete, start_track, continue_track),
                               advancedContext=(createMode, editMode, edit, delete, shapeLineColor, shapeFillColor),
                               onLoadActive=(close, create, createMode, editMode),
-                              onShapesPresent=(saveAs, hideAll, showAll),
+                              onShapesPresent=(hideAll, showAll),
                               switchDataChannel=switchDataChannel)
 
         self.menus = struct(
@@ -455,7 +435,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.paintLabelsOption.triggered.connect(self.togglePaintLabelsOption)
 
         addActions(self.menus.file,
-                   (open, opendir, changeSavedir, openAnnotation, self.menus.recentFiles, save, saveAs,
+                   (open, opendir, self.menus.recentFiles, save,
                     close, resetAll, quit))
         # addActions(self.menus.help, (help, showInfo))
         addActions(self.menus.help, [showInfo])
@@ -484,12 +464,12 @@ class MainWindow(QMainWindow, WindowMixin):
         #     delete, None,
         #     zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
         self.actions.beginner = (
-            open, opendir, changeSavedir, openNextImg, openPrevImg, save, None, create,
+            open, opendir, openNextImg, openPrevImg, save, None, create,
             delete, None,
             zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
 
         self.actions.advanced = (
-            open, opendir, changeSavedir, openNextImg, openPrevImg, save, None,
+            open, opendir, openNextImg, openPrevImg, save, None,
             createMode, editMode, None,
             hideAll, showAll)
 
@@ -540,14 +520,14 @@ class MainWindow(QMainWindow, WindowMixin):
             self.settings[SETTING_TRACKS_DATABASE_FNAME] = self.tracks_db_fname
 
         if (os.path.exists(self.tracks_db_fname) and os.path.isfile(self.tracks_db_fname)):
-            if test_db_connection(self.tracks_db_fname):
+            if DatabaseOps.test_db_connection(self.tracks_db_fname):
                 print('tracks database connection successful')
                 self.tracking_available = True
             else:
                 print('WARNING! tracks database connection failed')
                 self.tracking_available = False
         else:
-            if create_tracks_db(self.tracks_db_fname):
+            if DatabaseOps.create_tracks_db(self.tracks_db_fname):
                 print('created new tracks database file: %s' % self.tracks_db_fname)
                 self.tracking_available = True
             else:
@@ -704,7 +684,7 @@ class MainWindow(QMainWindow, WindowMixin):
             label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_FORMAT_STRING)])
             self.TracksToTrackItems[curr_track].addChild(label_item)
 
-            curr_track.database_add_label(self.tracks_db_fname, self.canvas.selectedShape.uid, self.canvas.selectedShape.label.dt)
+            curr_track.database_add_label(self.tracks_db_fname, self.canvas.selectedShape.label)
 
             self.trackListWidget.resizeColumnToContents(0)
             self.trackListWidget.resizeColumnToContents(1)
@@ -793,7 +773,7 @@ class MainWindow(QMainWindow, WindowMixin):
             icon = newIcon('labels')
             action = QAction(
                 icon, '&%d %s' % (i + 1, QFileInfo(f).fileName()), self)
-            action.triggered.connect(partial(self.loadRecent, f))
+            # action.triggered.connect(partial(self.loadRecent, f))
             menu.addAction(action)
 
     def popLabelListMenu(self, point):
@@ -847,6 +827,7 @@ class MainWindow(QMainWindow, WindowMixin):
         except:
             pass
 
+
     # React to canvas signals.
     def shapeSelectionChanged(self, selected=False):
         if self._noSelectionSlot:
@@ -863,6 +844,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.shapeLineColor.setEnabled(selected)
         self.actions.shapeFillColor.setEnabled(selected)
 
+
     def addLabel(self, shape):
         shape.paintLabel = self.paintLabelsOption.isChecked()
         # item = HashableQListWidgetItem(shape.label.name + ' (' + shape.label.uid + ')')
@@ -878,6 +860,7 @@ class MainWindow(QMainWindow, WindowMixin):
             action.setEnabled(True)
         self.labelList.resizeColumnToContents(0)
         self.labelList.resizeColumnToContents(1)
+
 
     def remLabel(self, shape):
         if shape is None:
@@ -910,7 +893,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.canvas.loadShapes(s)
 
-        label_uids = [label.uid for label in labels]
+        # label_uids = [label.uid for label in labels]
         # self.loadTracks(label_uids)
         self.loadTracks()
 
@@ -918,18 +901,21 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def loadTracks(self):
-        tracks_from_db = read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt)
+        tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt)
         if len(tracks_from_db) > 0:
-            tracks_df = pd.DataFrame(np.array(tracks_from_db), columns=['track_uid', 'label_uid', 'label_dt', 'human_readable_name'])
+            tracks_df = pd.DataFrame(np.array(tracks_from_db), columns=['track_uid', 'track_human_readable_name',
+                                                                        'label_id', 'label_uid', 'track_id', 'label_dt', 'label_name',
+                                                                        'lon0', 'lat0', 'lon1', 'lat1', 'lon2', 'lat2', 'sourcedata_fname'])
             tracks_df['label_dt'] = pd.to_datetime(tracks_df['label_dt'])
             track_uids = tracks_df['track_uid'].unique()
             for track_uid in track_uids:
                 if track_uid not in self.tracks.keys():
-                    track_human_readable_name = np.array(tracks_df[tracks_df['track_uid'] == track_uid]['human_readable_name'])[0]
+                    track_human_readable_name = np.array(tracks_df[tracks_df['track_uid'] == track_uid]['track_human_readable_name'])[0]
                     curr_track = Track({'uid': track_uid, 'human_readable_name': track_human_readable_name})
                     track_labels = tracks_df[tracks_df['track_uid'] == track_uid]
                     for idx, track_label_row in track_labels.iterrows():
-                        curr_track.append_new_label({'uid': track_label_row['label_uid'], 'dt': track_label_row['label_dt']})
+                        # curr_track.append_new_label({'uid': track_label_row['label_uid'], 'dt': track_label_row['label_dt']})
+                        curr_track.append_new_label(MCSlabel.from_db_row_dict(track_label_row.to_dict()))
 
                     track_item = HashableQTreeWidgetItem([curr_track.human_readable_name, curr_track.uid, ''])
                     track_item.setFlags(track_item.flags() | Qt.ItemIsUserCheckable)
@@ -941,7 +927,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     self.TracksToTrackItems[curr_track] = track_item
 
                     for label in curr_track.labels:
-                        label_item = HashableQTreeWidgetItem(['', label['uid'], datetime.strftime(label['dt'], DATETIME_FORMAT_STRING)])
+                        label_item = HashableQTreeWidgetItem(['', label.uid, datetime.strftime(label.dt, DATETIME_FORMAT_STRING)])
                         label_item.setRowBackground(generateColorByText(curr_track.uid))
                         track_item.addChild(label_item)
                     track_item.setExpanded(True)
@@ -951,30 +937,42 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
 
-    def saveLabels(self, annotationFilePath):
-        annotationFilePath = ustr(annotationFilePath)
-        if self.labelFile is None:
-            self.labelFile = LabelFile()
+    # def saveLabels(self, annotationFilePath):
+    #     annotationFilePath = ustr(annotationFilePath)
+    #     if self.labelFile is None:
+    #         self.labelFile = LabelFile()
+    #
+    #     def format_shape(s):
+    #         return dict(label=s.label,
+    #                     line_color=s.line_color.getRgb(),
+    #                     fill_color=s.fill_color.getRgb(),
+    #                     points=[(p.x(), p.y()) for p in s.points],
+    #                     latlonPoints = [(p.x(), p.y()) for p in s.latlonPoints],
+    #                     difficult = s.difficult)
+    #
+    #     shapes = [format_shape(shape) for shape in self.canvas.shapes]
+    #     # Can add differrent annotation formats here
+    #     try:
+    #         if not ustr(annotationFilePath).endswith(MCC_XML_EXT):
+    #             annotationFilePath += MCC_XML_EXT
+    #         print ('data: ' + self.filePath + ' -> Its xml: ' + annotationFilePath)
+    #         self.labelFile.saveArbitraryXMLformat(annotationFilePath, self.canvas.shapes, self.filePath)
+    #         return True
+    #     except LabelFileError as e:
+    #         self.errorMessage(u'Error saving label data', u'<b>%s</b>' % e)
+    #         return False
 
-        def format_shape(s):
-            return dict(label=s.label,
-                        line_color=s.line_color.getRgb(),
-                        fill_color=s.fill_color.getRgb(),
-                        points=[(p.x(), p.y()) for p in s.points],
-                        latlonPoints = [(p.x(), p.y()) for p in s.latlonPoints],
-                        difficult = s.difficult)
 
-        shapes = [format_shape(shape) for shape in self.canvas.shapes]
-        # Can add differrent annotation formats here
+    def saveLabels(self):
         try:
-            if not ustr(annotationFilePath).endswith(MCC_XML_EXT):
-                annotationFilePath += MCC_XML_EXT
-            print ('data: ' + self.filePath + ' -> Its xml: ' + annotationFilePath)
-            self.labelFile.saveArbitraryXMLformat(annotationFilePath, self.canvas.shapes, self.filePath)
+            for shape in self.canvas.shapes:
+                curr_label = shape.label
+                DatabaseOps.insert_label_data(self.tracks_db_fname, curr_label)
             return True
-        except LabelFileError as e:
-            self.errorMessage(u'Error saving label data', u'<b>%s</b>' % e)
+        except Exception as ex:
+            ReportException('./errors.log', ex)
             return False
+
 
     def labelSelectionChanged(self):
         item = self.currentItem()
@@ -1040,7 +1038,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     # Callback functions:
-    def newShape(self):
+    def newShapeCallback(self):
         """Pop-up and give focus to the label editor.
 
         position MUST be in global coordinates.
@@ -1092,10 +1090,11 @@ class MainWindow(QMainWindow, WindowMixin):
         pt2 = {'lat': lat2, 'lon': lon2}
         pts = {'pt0': pt0, 'pt1': pt1, 'pt2': pt2}
         new_shape.label.pts = pts
+        new_shape.label.sourcedata_fname = os.path.basename(self.filePath)
 
 
 
-    def scrollRequest(self, delta, orientation):
+    def scrollRequestCallback(self, delta, orientation):
         units = - delta / (8 * 15)
         bar = self.scrollBars[orientation]
         bar.setValue(bar.value() + bar.singleStep() * units)
@@ -1109,7 +1108,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def addZoom(self, increment=10):
         self.setZoom(self.zoomWidget.value() + increment)
 
-    def zoomRequest(self, delta):
+    def zoomRequestCallback(self, delta):
         # get the current scrollbar positions
         # calculate the percentages ~ coordinates
         h_bar = self.scrollBars[Qt.Horizontal]
@@ -1296,40 +1295,41 @@ class MainWindow(QMainWindow, WindowMixin):
             fileWidgetItem.setSelected(True)
 
         if unicodeFilePath and os.path.exists(unicodeFilePath):
-            if LabelFile.isLabelFile(unicodeFilePath):
-                try:
-                    self.labelFile = LabelFile(unicodeFilePath)
-                except LabelFileError as e:
-                    self.errorMessage(u'Error opening file',
-                                      (u"<p><b>%s</b></p>"
-                                       u"<p>Make sure <i>%s</i> is a valid label file.")
-                                      % (e, unicodeFilePath))
-                    self.status("Error reading %s" % unicodeFilePath)
-                    return False
-                self.imageData = self.labelFile.imageData
-                image = QImage.fromData(self.imageData)
-            else:
-                # Load image:
-                # read data first and store for saving into label file.
-                self.curr_dt = DateTimeFromDataFName(unicodeFilePath)
+            # if LabelFile.isLabelFile(unicodeFilePath):
+            #     try:
+            #         self.labelFile = LabelFile(unicodeFilePath)
+            #     except LabelFileError as e:
+            #         self.errorMessage(u'Error opening file',
+            #                           (u"<p><b>%s</b></p>"
+            #                            u"<p>Make sure <i>%s</i> is a valid label file.")
+            #                           % (e, unicodeFilePath))
+            #         self.status("Error reading %s" % unicodeFilePath)
+            #         return False
+            #     self.imageData = self.labelFile.imageData
+            #     image = QImage.fromData(self.imageData)
+            # else:
 
-                try:
-                    if self.preserveBasemapConfig.isChecked() & (self.basemaphelper is not None):
-                        self.basemaphelper = read(unicodeFilePath, default = self.basemaphelper)
-                    else:
-                        self.basemaphelper = read(unicodeFilePath, None)
-                except:
-                    return False
+            # Load image:
+            # read data first and store for saving into label file.
+            self.curr_dt = DateTimeFromDataFName(unicodeFilePath)
 
-                height, width, channel = self.basemaphelper.CVimageCombined.shape
-                bytesPerLine = 3 * width
+            try:
+                if self.preserveBasemapConfig.isChecked() & (self.basemaphelper is not None):
+                    self.basemaphelper = read(unicodeFilePath, default = self.basemaphelper)
+                else:
+                    self.basemaphelper = read(unicodeFilePath, None)
+            except:
+                return False
 
-                self.imageData = self.basemaphelper.CVimageCombined
-                self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
-                self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
-                image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
+            height, width, channel = self.basemaphelper.CVimageCombined.shape
+            bytesPerLine = 3 * width
 
-                self.labelFile = None
+            self.imageData = self.basemaphelper.CVimageCombined
+            self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
+            self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
+            image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
+
+            # self.labelFile = None
 
             # image = QImage.fromData(self.imageData)
             if image.isNull():
@@ -1341,8 +1341,8 @@ class MainWindow(QMainWindow, WindowMixin):
             self.image = image
             self.filePath = unicodeFilePath
             self.canvas.loadPixmap(QPixmap.fromImage(image))
-            if self.labelFile:
-                self.loadLabels(self.labelFile.shapes)
+            # if self.labelFile:
+            #     self.loadLabels(self.labelFile.shapes)
             self.setClean()
             self.canvas.setEnabled(True)
             self.adjustScale(initial=True)
@@ -1356,17 +1356,21 @@ class MainWindow(QMainWindow, WindowMixin):
 
             # Label xml file and show bound box according to its filename
             # if self.usingPascalVocFormat is True:
-            if self.defaultSaveDir is not None:
-                basename = os.path.basename(
-                    os.path.splitext(self.filePath)[0])
-                MCCXMLPath = os.path.join(self.defaultSaveDir, basename + MCC_XML_EXT)
+            # if self.defaultSaveDir is not None:
+            #     basename = os.path.basename(
+            #         os.path.splitext(self.filePath)[0])
+            #     MCCXMLPath = os.path.join(self.defaultSaveDir, basename + MCC_XML_EXT)
+            #
+            #     if os.path.isfile(MCCXMLPath):
+            #         self.loadArbitraryXMLByFilename(MCCXMLPath)
+            # else:
+            #     MCCXMLPath = os.path.splitext(filePath)[0] + MCC_XML_EXT
+            #     if os.path.isfile(MCCXMLPath):
+            #         self.loadArbitraryXMLByFilename(MCCXMLPath)
 
-                if os.path.isfile(MCCXMLPath):
-                    self.loadArbitraryXMLByFilename(MCCXMLPath)
-            else:
-                MCCXMLPath = os.path.splitext(filePath)[0] + MCC_XML_EXT
-                if os.path.isfile(MCCXMLPath):
-                    self.loadArbitraryXMLByFilename(MCCXMLPath)
+            labels_from_database = MCSlabel.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
+            self.loadLabels(labels_from_database)
+
 
             self.setWindowTitle(__appname__ + ' ' + filePath)
 
@@ -1375,11 +1379,10 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.labelList.setCurrentItem(self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1))
                 self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1).setSelected(True)
 
-            # self.canvas.curr_dt = DateTimeFromDataFName(unicodeFilePath)
-
             self.canvas.setFocus(True)
             return True
         return False
+
 
 
     def resizeEvent(self, event):
@@ -1449,44 +1452,44 @@ class MainWindow(QMainWindow, WindowMixin):
         settings.save()
     ## User Dialogs ##
 
-    def loadRecent(self, filename):
-        if self.mayContinue():
-            self.loadFile(filename)
+    # def loadRecent(self, filename):
+    #     if self.mayContinue():
+    #         self.loadFile(filename)
 
 
 
-    def changeSavedirDialog(self, _value=False):
-        if self.defaultSaveDir is not None:
-            path = ustr(self.defaultSaveDir)
-        else:
-            path = '.'
+    # def changeSavedirDialog(self, _value=False):
+    #     if self.defaultSaveDir is not None:
+    #         path = ustr(self.defaultSaveDir)
+    #     else:
+    #         path = '.'
+    #
+    #     dirpath = ustr(QFileDialog.getExistingDirectory(self,
+    #                                                    '%s - Save annotations to the directory' % __appname__, path,  QFileDialog.ShowDirsOnly
+    #                                                    | QFileDialog.DontResolveSymlinks))
+    #
+    #     if dirpath is not None and len(dirpath) > 1:
+    #         self.defaultSaveDir = dirpath
+    #
+    #     self.statusBar().showMessage('%s . Annotation will be saved to %s' %
+    #                                  ('Change saved folder', self.defaultSaveDir))
+    #     self.statusBar().show()
 
-        dirpath = ustr(QFileDialog.getExistingDirectory(self,
-                                                       '%s - Save annotations to the directory' % __appname__, path,  QFileDialog.ShowDirsOnly
-                                                       | QFileDialog.DontResolveSymlinks))
-
-        if dirpath is not None and len(dirpath) > 1:
-            self.defaultSaveDir = dirpath
-
-        self.statusBar().showMessage('%s . Annotation will be saved to %s' %
-                                     ('Change saved folder', self.defaultSaveDir))
-        self.statusBar().show()
-
-    def openAnnotationDialog(self, _value=False):
-        if self.filePath is None:
-            self.statusBar().showMessage('Please select image first')
-            self.statusBar().show()
-            return
-
-        path = os.path.dirname(ustr(self.filePath))\
-            if self.filePath else '.'
-        if self.usingPascalVocFormat:
-            filters = "Open Annotation XML file (%s)" % ' '.join(['*.xml'])
-            filename = ustr(QFileDialog.getOpenFileName(self,'%s - Choose a xml file' % __appname__, path, filters))
-            if filename:
-                if isinstance(filename, (tuple, list)):
-                    filename = filename[0]
-            self.loadArbitraryXMLByFilename(filename)
+    # def openAnnotationDialog(self, _value=False):
+    #     if self.filePath is None:
+    #         self.statusBar().showMessage('Please select image first')
+    #         self.statusBar().show()
+    #         return
+    #
+    #     path = os.path.dirname(ustr(self.filePath))\
+    #         if self.filePath else '.'
+    #     if self.usingPascalVocFormat:
+    #         filters = "Open Annotation XML file (%s)" % ' '.join(['*.xml'])
+    #         filename = ustr(QFileDialog.getOpenFileName(self,'%s - Choose a xml file' % __appname__, path, filters))
+    #         if filename:
+    #             if isinstance(filename, (tuple, list)):
+    #                 filename = filename[0]
+    #         self.loadArbitraryXMLByFilename(filename)
 
     def openDirDialog(self, _value=False, dirpath=None):
         if not self.mayContinue():
@@ -1542,6 +1545,7 @@ class MainWindow(QMainWindow, WindowMixin):
             if filename:
                 self.loadFile(filename)
 
+
     def openNextImg(self, _value=False):
         # Proceding prev image without dialog if having any label
         if self.autoSaving.isChecked():
@@ -1595,23 +1599,28 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def saveFile(self, _value=False):
-        if self.defaultSaveDir is not None and len(ustr(self.defaultSaveDir)):
-            if self.filePath:
-                imgFileName = os.path.basename(self.filePath)
-                savedFileName = os.path.splitext(imgFileName)[0]
-                savedPath = os.path.join(ustr(self.defaultSaveDir), savedFileName)
-                self._saveFile(savedPath)
-        else:
-            imgFileDir = os.path.dirname(self.filePath)
-            imgFileName = os.path.basename(self.filePath)
-            savedFileName = os.path.splitext(imgFileName)[0]
-            savedPath = os.path.join(imgFileDir, savedFileName)
-            self._saveFile(savedPath if self.labelFile else self.saveFileDialog())
+        # if self.defaultSaveDir is not None and len(ustr(self.defaultSaveDir)):
+        #     if self.filePath:
+        #         imgFileName = os.path.basename(self.filePath)
+        #         savedFileName = os.path.splitext(imgFileName)[0]
+        #         savedPath = os.path.join(ustr(self.defaultSaveDir), savedFileName)
+        #         self._saveFile(savedPath)
+        # else:
+        #     imgFileDir = os.path.dirname(self.filePath)
+        #     imgFileName = os.path.basename(self.filePath)
+        #     savedFileName = os.path.splitext(imgFileName)[0]
+        #     savedPath = os.path.join(imgFileDir, savedFileName)
+        #     self._saveFile(savedPath if self.labelFile else self.saveFileDialog())
+        if self.saveLabels():
+            self.setClean()
+            self.statusBar().showMessage('Saved labels to database')
+            self.statusBar().show()
 
 
-    def saveFileAs(self, _value=False):
-        assert not self.image.isNull(), "cannot save empty image"
-        self._saveFile(self.saveFileDialog())
+    # def saveFileAs(self, _value=False):
+    #     assert not self.image.isNull(), "cannot save empty image"
+    #     self._saveFile(self.saveFileDialog())
+
 
     def saveFileDialog(self):
         caption = '%s - Choose File' % __appname__
@@ -1630,11 +1639,17 @@ class MainWindow(QMainWindow, WindowMixin):
             return os.path.splitext(fullFilePath)[0] # Return file path without the extension.
         return ''
 
-    def _saveFile(self, annotationFilePath):
-        if annotationFilePath and self.saveLabels(annotationFilePath):
-            self.setClean()
-            self.statusBar().showMessage('Saved to  %s' % annotationFilePath)
-            self.statusBar().show()
+
+    # def _saveFile(self):
+    #     # if annotationFilePath and self.saveLabels(annotationFilePath):
+    #     #     self.setClean()
+    #     #     self.statusBar().showMessage('Saved to  %s' % annotationFilePath)
+    #     #     self.statusBar().show()
+    #     if self.saveLabels():
+    #         self.setClean()
+    #         self.statusBar().showMessage('Saved labels to database')
+    #         self.statusBar().show()
+
 
     def closeFile(self, _value=False):
         if not self.mayContinue():
@@ -1645,26 +1660,32 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.setEnabled(False)
         self.actions.saveAs.setEnabled(False)
 
+
     def resetAll(self):
         self.settings.reset()
         self.close()
         proc = QProcess()
         proc.startDetached(os.path.abspath(__file__))
 
+
     def mayContinue(self):
         return not (self.dirty and not self.discardChangesDialog())
+
 
     def discardChangesDialog(self):
         yes, no = QMessageBox.Yes, QMessageBox.No
         msg = u'You have unsaved changes, proceed anyway?'
         return yes == QMessageBox.warning(self, u'Attention', msg, yes | no)
 
+
     def errorMessage(self, title, message):
         return QMessageBox.critical(self, title,
                                     '<p><b>%s</b></p>%s' % (title, message))
 
+
     def currentPath(self):
         return os.path.dirname(self.filePath) if self.filePath else '.'
+
 
     def chooseColor1(self):
         color = self.colorDialog.getColor(self.lineColor, u'Choose line color',
@@ -1676,12 +1697,14 @@ class MainWindow(QMainWindow, WindowMixin):
             self.canvas.update()
             self.setDirty()
 
+
     def deleteSelectedShape(self):
         self.remLabel(self.canvas.deleteSelected())
         self.setDirty()
         if self.noShapes():
             for action in self.actions.onShapesPresent:
                 action.setEnabled(False)
+
 
     def chshapeLineColor(self):
         color = self.colorDialog.getColor(self.lineColor, u'Choose line color',
@@ -1691,6 +1714,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.canvas.update()
             self.setDirty()
 
+
     def chshapeFillColor(self):
         color = self.colorDialog.getColor(self.fillColor, u'Choose fill color',
                                           default=DEFAULT_FILL_COLOR)
@@ -1699,15 +1723,18 @@ class MainWindow(QMainWindow, WindowMixin):
             self.canvas.update()
             self.setDirty()
 
+
     # def copyShape(self):
     #     self.canvas.endMove(copy=True)
     #     self.addLabel(self.canvas.selectedShape)
     #     self.setDirty()
 
+
     def moveShape(self):
         # self.canvas.endMove(copy=False)
         self.canvas.endMove()
         self.setDirty()
+
 
     def loadPredefinedClasses(self, predefClassesFile):
         if os.path.exists(predefClassesFile) is True:
@@ -1719,18 +1746,16 @@ class MainWindow(QMainWindow, WindowMixin):
                     else:
                         self.labelHist.append(line)
 
-    def loadArbitraryXMLByFilename(self, xmlPath):
-        if self.filePath is None:
-            return
-        if os.path.isfile(xmlPath) is False:
-            return
 
-        MCCxmlParseReader = ArbitraryXMLReader(xmlPath)
-        # shapes = MCCxmlParseReader.getShapes()
-        labels_loaded = MCCxmlParseReader.labels
-        self.loadLabels(labels_loaded)
-        # self.canvas.verified = MCCxmlParseReader.verified
-
+    # def loadArbitraryXMLByFilename(self, xmlPath):
+    #     if self.filePath is None:
+    #         return
+    #     if os.path.isfile(xmlPath) is False:
+    #         return
+    #
+    #     MCCxmlParseReader = ArbitraryXMLReader(xmlPath)
+    #     labels_loaded = MCCxmlParseReader.labels
+    #     self.loadLabels(labels_loaded)
 
 
     def togglePaintLabelsOption(self):

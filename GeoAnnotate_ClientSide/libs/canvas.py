@@ -37,6 +37,8 @@ class Canvas(QWidget):
     def __init__(self, *args, **kwargs):
         super(Canvas, self).__init__(*args, **kwargs)
         # Initialise local state.
+        if 'parent' in kwargs.keys():
+            self.parent = kwargs['parent']
         self.mode = self.EDIT
         self.shapes = []
         self.current = None
@@ -120,9 +122,9 @@ class Canvas(QWidget):
         # print(posLat, posLon)
 
         # Update coordinates in status bar if image is opened
-        window = self.parent().window()
+        window = self.parent.window()
         if window.filePath is not None:
-            self.parent().window().labelCoordinates.setText(
+            self.parent.window().labelCoordinates.setText(
                 # 'X: %d; Y: %d' % (pos.x(), pos.y()))
                 'lat: %f; lon: %f' % (posLat, posLon))
 
@@ -187,7 +189,7 @@ class Canvas(QWidget):
         # self.setToolTip('X: %d; Y: %d' % (pos.x(), pos.y()))
 
         try:
-            bmhelper = self.parent().window().basemaphelper
+            bmhelper = self.parent.window().basemaphelper
             valueStr = bmhelper.getValueStr_AtCoordinates(self.mousePosLatLon.x(), self.mousePosLatLon.y())
             # valueStr = 'unknown'
         except:
@@ -489,7 +491,7 @@ class Canvas(QWidget):
     def transformToLatLon(self, PicturePoint, outputQPointF = False):
         lat,lon=0.,0.
         try:
-            bmhelper = self.parent().window().basemaphelper
+            bmhelper = self.parent.window().basemaphelper
             # bm = bmhelper.bm
             x_pic,y_pic = PicturePoint.x(),PicturePoint.y()
             # for cylindrical projections ONLY
@@ -506,7 +508,7 @@ class Canvas(QWidget):
     def transformLatLonToPixmapCoordinates(self, lon, lat):
         x_pic,y_pic=0.,0.
         try:
-            bmhelper = self.parent().window().basemaphelper
+            bmhelper = self.parent.window().basemaphelper
             # bm = bmhelper.bm
             pixmap_width = self.pixmap.width()
             pixmap_height = self.pixmap.height()

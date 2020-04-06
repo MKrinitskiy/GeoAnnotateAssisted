@@ -48,11 +48,11 @@ class Shape(object):
             # new shape
             # self.uid = str(uuid.uuid4()).replace('-', '')
             self.uid = str(uuid.uuid4())
-            if 'curr_dt' in parent_canvas.parent().__dict__.keys():
-                self.dt = parent_canvas.parent().curr_dt
+            if 'curr_dt' in parent_canvas.parent.__dict__.keys():
+                self.dt = parent_canvas.parent.curr_dt
             else:
                 self.dt = datetime.now()
-            self.label = MCSlabel('', self.uid, self.dt, None)
+            self.label = MCSlabel('', self.uid, self.dt, None, None)
         elif isinstance(label, MCSlabel):
             self.label = label
             self.uid = label.uid

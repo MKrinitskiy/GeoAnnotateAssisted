@@ -6,6 +6,7 @@ from .shape import Shape
 from .MCSlabel import MCSlabel
 from .ServiceDefs import ReportException
 from .horsephrase_implementation import generate_horsephrase
+from .DatabaseOps import *
 
 class Track():
     def __init__(self, data_dict = None):
@@ -21,11 +22,14 @@ class Track():
 
     def append_new_label(self, label):
         if isinstance(label, Shape):
-            self.labels.append({'uid': label.uid, 'dt': label.dt})
+            # self.labels.append({'uid': label.uid, 'dt': label.dt})
+            # self.labels.append({'shape': label, 'label': label.label})
+            self.labels.append(label.label)
         elif isinstance(label, MCSlabel):
-            self.labels.append({'uid': label.uid, 'dt': label.dt})
+            # self.labels.append({'uid': label.uid, 'dt': label.dt})
+            self.labels.append(label)
         elif isinstance(label, dict):
-            self.labels.append({'uid': label['uid'], 'dt': label['dt']})
+            raise NotImplementedError('Unable to parse the label data to append it to to the track')
         else:
             raise NotImplementedError('Unable to parse the label data to append it to to the track')
 
@@ -45,21 +49,11 @@ class Track():
             print('Failed executing sqlite query')
 
     def database_insert_track_info(self, db_fname):
+        DatabaseOps.insert_track_data(db_fname, self)
         try:
             for curr_label in self.labels:
-                self.database_add_label(db_fname, curr_label['uid'], curr_label['dt'])
+                DatabaseOps.insert_label_data(db_fname, curr_label)
+                DatabaseOps.insert_track_label_entry(db_fname, self, curr_label)
         except Exception as ex:
             ReportException('./errors.log', ex)
             print('Failed executing sqlite query')
-
-
-    def database_add_label(self, db_fname, label_uid, label_dt):
-        with sqlite3.connect(db_fname) as conn:
-            c = conn.cursor()
-            c.execute(INSERT_TRACK_QUERY_TEXT % (self.uid, self.human_readable_name))
-            c.execute(INSERT_LABEL_QUERY_TEXT % (label_uid,
-                                                 datetime.strftime(label_dt, DATETIME_FORMAT_STRING),
-                                                 self.uid))
-            c.execute(UPDATE_TRACK_START_DT_QUERY_TEXT % (self.uid, self.uid))
-            c.execute(UPDATE_TRACK_END_DT_QUERY_TEXT % (self.uid, self.uid))
-            conn.commit()
