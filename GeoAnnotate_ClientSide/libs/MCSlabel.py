@@ -41,10 +41,12 @@ class MCSlabel():
         labels = []
         sourcedata_basename = os.path.basename(sourcedata_fname)
         data_read = DatabaseOps.read_labels_by_sourcedata_basename(db_fname, sourcedata_basename)
-        data_read_df = pd.DataFrame(np.array(data_read), columns=['label_id', 'label_uid', 'label_dt', 'label_name', 'lon0', 'lat0', 'lon1', 'lat1', 'lon2', 'lat2', 'sourcedata_fname'])
-        data_read_df['label_dt'] = pd.to_datetime(data_read_df['label_dt'])
-        for idx,row in data_read_df.iterrows():
-            labeldata_dict = row.to_dict()
-            label = MCSlabel.from_db_row_dict(labeldata_dict)
-            labels.append(label)
+        if data_read and len(data_read) > 0:
+            data_read_df = pd.DataFrame(np.array(data_read), columns=['label_id', 'label_uid', 'label_dt', 'label_name', 'lon0', 'lat0', 'lon1', 'lat1', 'lon2', 'lat2', 'sourcedata_fname'])
+            data_read_df['label_dt'] = pd.to_datetime(data_read_df['label_dt'])
+            for idx,row in data_read_df.iterrows():
+                labeldata_dict = row.to_dict()
+                label = MCSlabel.from_db_row_dict(labeldata_dict)
+                labels.append(label)
+
         return labels

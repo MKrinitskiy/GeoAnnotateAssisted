@@ -62,12 +62,18 @@ def EnsureDirectoryExists(pathStr):
 
 
 
-def ReportException(err_fname, ex):
+def ReportException(err_fname, ex, **kwargs):
     exc_type, exc_value, exc_traceback = sys.exc_info()
     with open(err_fname, 'a') as errf:
         errf.write('================ ' + str(datetime.now()) + ' ================\n')
         traceback.print_tb(exc_traceback, limit=None, file=errf)
         traceback.print_exception(exc_type, exc_value, exc_traceback, limit=None, file=errf)
+        if len(kwargs) > 0:
+            errf.write('\n')
+            for k in kwargs.keys():
+                errf.write('......%s......\n' % k)
+                errf.write('%s' % kwargs[k])
+                errf.write('\n')
         errf.write('\n\n\n')
 
 

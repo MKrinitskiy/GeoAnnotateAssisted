@@ -228,7 +228,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.scrollRequest.connect(self.scrollRequestCallback)
 
         self.canvas.newShape.connect(self.newShapeCallback)
+        # self.canvas.shapeMoved.connect(self.ShapeModifiedCallback)
         self.canvas.shapeMoved.connect(self.setDirty)
+        self.canvas.shapeMovesFinished.connect(self.ShapeModifiedCallback)
         self.canvas.selectionChanged.connect(self.shapeSelectionChanged)
         self.canvas.drawingPolygon.connect(self.toggleDrawingSensitive)
 
@@ -676,19 +678,19 @@ class MainWindow(QMainWindow, WindowMixin):
         msg = u'Name:{0} \nApp Version:{1} \n{2} '.format(__appname__, __version__, sys.version_info)
         QMessageBox.information(self, u'Information', msg)
 
+
     def startNewTrack(self):
         if self.canvas.selectedShape:
             curr_track = Track()
             self.addTrack(curr_track)
             curr_track.append_new_label(self.canvas.selectedShape)
-            label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_FORMAT_STRING)])
+            label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
             self.TracksToTrackItems[curr_track].addChild(label_item)
 
-            curr_track.database_add_label(self.tracks_db_fname, self.canvas.selectedShape.label)
+            curr_track.database_insert_track_info(self.tracks_db_fname)
 
             self.trackListWidget.resizeColumnToContents(0)
             self.trackListWidget.resizeColumnToContents(1)
-
 
 
     def addTrack(self, curr_track):
@@ -698,18 +700,16 @@ class MainWindow(QMainWindow, WindowMixin):
         # item.setBackground(generateColorByText(track.uid))
         self.trackListWidget.addTopLevelItem(track_item)
         self.tracks[curr_track.uid] = curr_track
-        curr_track.database_insert_track_info(self.tracks_db_fname)
         self.TrackItemsToTracks[track_item] = curr_track
         self.TracksToTrackItems[curr_track] = track_item
 
         for label in curr_track.labels:
-            label_item = HashableQTreeWidgetItem(['', label['uid'], datetime.strftime(label.dt, DATETIME_FORMAT_STRING)])
+            label_item = HashableQTreeWidgetItem(['', label['uid'], datetime.strftime(label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
             # label_item.setBackground(generateColorByText(curr_track.uid))
             track_item.addChild(label_item)
         track_item.setExpanded(True)
         self.trackListWidget.resizeColumnToContents(0)
         self.trackListWidget.resizeColumnToContents(1)
-
 
 
     def continueExistingTrack(self):
@@ -723,7 +723,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 selected_track.append_new_label(self.canvas.selectedShape)
                 selected_track.database_update_track_info(self.tracks_db_fname)
 
-                label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_FORMAT_STRING)])
+                label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
                 self.TracksToTrackItems[selected_track].addChild(label_item)
             self.trackListWidget.resizeColumnToContents(0)
             self.trackListWidget.resizeColumnToContents(1)
@@ -847,14 +847,12 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def addLabel(self, shape):
         shape.paintLabel = self.paintLabelsOption.isChecked()
-        # item = HashableQListWidgetItem(shape.label.name + ' (' + shape.label.uid + ')')
-        item = HashableQTreeWidgetItem(self.labelList, [shape.label.name, shape.label.uid, datetime.strftime(shape.label.dt, DATETIME_FORMAT_STRING)])
+        item = HashableQTreeWidgetItem(self.labelList, [shape.label.name, shape.label.uid, datetime.strftime(shape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
         self.itemsToShapes[item] = shape
         self.shapesToItems[shape] = item
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
         item.setCheckState(0, Qt.Checked)
         item.setRowBackground(generateColorByText(shape.label.name))
-        # self.labelList.addItem(item)
         self.labelList.addTopLevelItem(item)
         for action in self.actions.onShapesPresent:
             action.setEnabled(True)
@@ -864,14 +862,12 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def remLabel(self, shape):
         if shape is None:
-            # print('rm empty label')
             return
         item = self.shapesToItems[shape]
-        self.labelList.takeItem(self.labelList.row(item))
+        # self.labelList.takeItem(self.labelList.row(item))
+        self.labelList.takeTopLevelItem(self.labelList.indexOfTopLevelItem(item))
         del self.shapesToItems[shape]
         del self.itemsToShapes[item]
-
-
 
 
 
@@ -893,8 +889,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.canvas.loadShapes(s)
 
-        # label_uids = [label.uid for label in labels]
-        # self.loadTracks(label_uids)
         self.loadTracks()
 
         return
@@ -902,9 +896,9 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def loadTracks(self):
         tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt)
-        if len(tracks_from_db) > 0:
+        if tracks_from_db and len(tracks_from_db) > 0:
             tracks_df = pd.DataFrame(np.array(tracks_from_db), columns=['track_uid', 'track_human_readable_name',
-                                                                        'label_id', 'label_uid', 'track_id', 'label_dt', 'label_name',
+                                                                        'label_id', 'label_uid', 'label_dt', 'label_name',
                                                                         'lon0', 'lat0', 'lon1', 'lat1', 'lon2', 'lat2', 'sourcedata_fname'])
             tracks_df['label_dt'] = pd.to_datetime(tracks_df['label_dt'])
             track_uids = tracks_df['track_uid'].unique()
@@ -927,40 +921,13 @@ class MainWindow(QMainWindow, WindowMixin):
                     self.TracksToTrackItems[curr_track] = track_item
 
                     for label in curr_track.labels:
-                        label_item = HashableQTreeWidgetItem(['', label.uid, datetime.strftime(label.dt, DATETIME_FORMAT_STRING)])
+                        label_item = HashableQTreeWidgetItem(['', label.uid, datetime.strftime(label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
                         label_item.setRowBackground(generateColorByText(curr_track.uid))
                         track_item.addChild(label_item)
                     track_item.setExpanded(True)
             self.trackListWidget.resizeColumnToContents(0)
             self.trackListWidget.resizeColumnToContents(1)
         return
-
-
-
-    # def saveLabels(self, annotationFilePath):
-    #     annotationFilePath = ustr(annotationFilePath)
-    #     if self.labelFile is None:
-    #         self.labelFile = LabelFile()
-    #
-    #     def format_shape(s):
-    #         return dict(label=s.label,
-    #                     line_color=s.line_color.getRgb(),
-    #                     fill_color=s.fill_color.getRgb(),
-    #                     points=[(p.x(), p.y()) for p in s.points],
-    #                     latlonPoints = [(p.x(), p.y()) for p in s.latlonPoints],
-    #                     difficult = s.difficult)
-    #
-    #     shapes = [format_shape(shape) for shape in self.canvas.shapes]
-    #     # Can add differrent annotation formats here
-    #     try:
-    #         if not ustr(annotationFilePath).endswith(MCC_XML_EXT):
-    #             annotationFilePath += MCC_XML_EXT
-    #         print ('data: ' + self.filePath + ' -> Its xml: ' + annotationFilePath)
-    #         self.labelFile.saveArbitraryXMLformat(annotationFilePath, self.canvas.shapes, self.filePath)
-    #         return True
-    #     except LabelFileError as e:
-    #         self.errorMessage(u'Error saving label data', u'<b>%s</b>' % e)
-    #         return False
 
 
     def saveLabels(self):
@@ -1001,6 +968,11 @@ class MainWindow(QMainWindow, WindowMixin):
             shape.label.name = shape_name
             shape.line_color = generateColorByText(shape.label.name)
             self.setDirty()
+            res = DatabaseOps.update_label(self.tracks_db_fname, shape.label)
+            if not res:
+                print('WARNING! the label was not updated in the database. Please refer to the errors.log file for details.')
+            else:
+                self.setClean()
         else:  # User probably changed item visibility
             self.canvas.setShapeVisible(shape, item.checkState(0) == Qt.Checked)
 
@@ -1008,7 +980,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def trackItemChanged(self, curr_item):
         # load all the shapes of the track
         if (not curr_item.parent()):
-            # top-level item - is a track
+            # then it is a top-level item - and it is a track
             # switch off all other top-level items checks
             # find all the shapes for this track
             # paint them
@@ -1091,7 +1063,31 @@ class MainWindow(QMainWindow, WindowMixin):
         pts = {'pt0': pt0, 'pt1': pt1, 'pt2': pt2}
         new_shape.label.pts = pts
         new_shape.label.sourcedata_fname = os.path.basename(self.filePath)
+        DatabaseOps.insert_label_data(self.tracks_db_fname, new_shape.label)
 
+
+
+    def ShapeModifiedCallback(self):
+        self.setDirty()
+        selected_shape = self.canvas.selectedShape
+        lon0 = selected_shape.latlonPoints[0].x()
+        lat0 = selected_shape.latlonPoints[0].y()
+        lon1 = selected_shape.latlonPoints[1].x()
+        lat1 = selected_shape.latlonPoints[1].y()
+        lon2 = selected_shape.latlonPoints[2].x()
+        lat2 = selected_shape.latlonPoints[2].y()
+        pt0 = {'lat': lat0, 'lon': lon0}
+        pt1 = {'lat': lat1, 'lon': lon1}
+        pt2 = {'lat': lat2, 'lon': lon2}
+        pts = {'pt0': pt0, 'pt1': pt1, 'pt2': pt2}
+        selected_shape.label.pts = pts
+        selected_shape.label.sourcedata_fname = os.path.basename(self.filePath)
+        self.setDirty()
+        res = DatabaseOps.update_label(self.tracks_db_fname, selected_shape.label)
+        if not res:
+            print('WARNING! the label was not updated in the database. Please refer to the errors.log file for details.')
+        else:
+            self.setClean()
 
 
     def scrollRequestCallback(self, delta, orientation):
@@ -1658,7 +1654,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.setClean()
         self.toggleActions(False)
         self.canvas.setEnabled(False)
-        self.actions.saveAs.setEnabled(False)
+        # self.actions.saveAs.setEnabled(False)
 
 
     def resetAll(self):
@@ -1699,8 +1695,19 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def deleteSelectedShape(self):
-        self.remLabel(self.canvas.deleteSelected())
+        shape_to_delete = self.canvas.deleteSelected()
+        self.remLabel(shape_to_delete)
         self.setDirty()
+        res = DatabaseOps.remove_label(self.tracks_db_fname, shape_to_delete.label.uid)
+        if not res:
+            print('WARNING! the label was not removed from database. Please refer to the errors.log file for details.')
+        else:
+            self.setClean()
+            self.tracks.clear()
+            self.TrackItemsToTracks.clear()
+            self.TracksToTrackItems.clear()
+            self.trackListWidget.clear()
+            self.loadTracks()
         if self.noShapes():
             for action in self.actions.onShapesPresent:
                 action.setEnabled(False)

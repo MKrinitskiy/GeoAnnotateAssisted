@@ -28,6 +28,7 @@ class Canvas(QWidget):
     newShape = pyqtSignal()
     selectionChanged = pyqtSignal(bool)
     shapeMoved = pyqtSignal()
+    shapeMovesFinished = pyqtSignal()
     drawingPolygon = pyqtSignal(bool)
 
     CREATE, EDIT, CREATEELLIPSE = list(range(3))
@@ -263,6 +264,7 @@ class Canvas(QWidget):
                 self.overrideCursor(CURSOR_POINT)
             else:
                 self.overrideCursor(CURSOR_GRAB)
+            self.shapeMovesFinished.emit()
         elif ev.button() == Qt.LeftButton:
             pos = self.transformPos(ev.pos())
             if self.drawing():

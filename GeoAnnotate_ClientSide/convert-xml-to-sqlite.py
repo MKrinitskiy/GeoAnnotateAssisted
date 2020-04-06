@@ -17,12 +17,18 @@ def main(argv):
             return
 
     xml_data_files = find_files('./', '*.MCC.xml')
+    labels_read = 0
+    labels_written = 0
     for xml_fname in xml_data_files:
         MCCxmlParseReader = ArbitraryXMLReader(xml_fname)
         labels_loaded = MCCxmlParseReader.labels
         print('file %s: found %d labels' % (os.path.basename(xml_fname), len(labels_loaded)))
+        labels_read = labels_read + len(labels_loaded)
         for label in labels_loaded:
-            DatabaseOps.insert_label_data(tracks_db_fname, label)
+            rows_affected = DatabaseOps.insert_label_data(tracks_db_fname, label)
+            labels_written = labels_written + rows_affected
+    print('labels read: %d; labels written: %d' % (labels_read, labels_written))
+
 
 
 
