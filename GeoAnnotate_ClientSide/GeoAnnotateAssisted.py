@@ -16,22 +16,7 @@ import sys
 python_path = sys.executable
 
 #region setting up PROJ_LIB
-def set_default_PROJ_LIB():
-    print('setting default PROJ_LIB environment variable')
-    if sys.platform == 'win32':
-        os.environ['PROJ_LIB'] = os.path.join(os.path.split(python_path)[0], 'Library', 'share')
-    elif ((sys.platform == 'linux') | (sys.platform == 'darwin')):
-        os.environ['PROJ_LIB'] = os.path.join(sys.executable.replace('bin/python', ''), 'share', 'proj')
 
-if (os.environ['PROJ_LIB']==''):
-    set_default_PROJ_LIB()
-elif ((os.path.exists(os.environ['PROJ_LIB'])) and
-      (os.path.isdir(os.environ['PROJ_LIB'])) and
-      (os.path.exists(os.path.join(os.environ['PROJ_LIB'], 'epsg'))) and
-      (os.path.isfile(os.path.join(os.environ['PROJ_LIB'], 'epsg')))):
-    pass
-else:
-    set_default_PROJ_LIB()
 #endregion setting up PROJ_LIB
 
 #region import Qt
@@ -88,7 +73,8 @@ class WindowMixin(object):
 class MainWindow(QMainWindow, WindowMixin):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
 
-    def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None, defaultSaveDir=None):
+    # def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None, defaultSaveDir=None):
+    def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
 
@@ -101,7 +87,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.settings.load()
         settings = self.settings
 
-        self.defaultSaveDir = defaultSaveDir
+        # self.defaultSaveDir = defaultSaveDir
 
         # For loading all image under a directory
         self.mImgList = []
@@ -414,9 +400,9 @@ class MainWindow(QMainWindow, WindowMixin):
             labelList=labelMenu)
 
         # Auto saving : Enable auto saving if pressing next
-        self.autoSaving = QAction("Auto Saving", self)
-        self.autoSaving.setCheckable(True)
-        self.autoSaving.setChecked(settings.get(SETTING_AUTO_SAVE, True))
+        # self.autoSaving = QAction("Auto Saving", self)
+        # self.autoSaving.setCheckable(True)
+        # self.autoSaving.setChecked(settings.get(SETTING_AUTO_SAVE, True))
 
         # Auto preserving basemap config
         self.preserveBasemapConfig = QAction("Preserve basemap configuration", self)
@@ -443,7 +429,7 @@ class MainWindow(QMainWindow, WindowMixin):
         addActions(self.menus.help, [showInfo])
         addActions(self.menus.view, (
             self.preserveBasemapConfig,
-            self.autoSaving,
+            # self.autoSaving,
             self.singleClassMode,
             self.paintLabelsOption,
             labels, advancedMode, None,
@@ -506,16 +492,17 @@ class MainWindow(QMainWindow, WindowMixin):
         self.move(position)
         saveDir = ustr(settings.get(SETTING_SAVE_DIR, None))
         self.lastOpenDir = ustr(settings.get(SETTING_LAST_OPEN_DIR, None))
-        if self.defaultSaveDir is None and saveDir is not None and os.path.exists(saveDir):
-            self.defaultSaveDir = saveDir
-            self.statusBar().showMessage('%s started. Annotation will be saved to %s' %
-                                         (__appname__, self.defaultSaveDir))
-            self.statusBar().show()
+        # if self.defaultSaveDir is None and saveDir is not None and os.path.exists(saveDir):
+        #     self.defaultSaveDir = saveDir
+        #     self.statusBar().showMessage('%s started. Annotation will be saved to %s' %
+        #                                  (__appname__, self.defaultSaveDir))
+        #     self.statusBar().show()
 
 
         #region tracks database
         try:
-            self.tracks_db_fname = self.settings.get(SETTING_TRACKS_DATABASE_FNAME, os.path.join(self.defaultSaveDir, 'tracks.db'))
+            # self.tracks_db_fname = self.settings.get(SETTING_TRACKS_DATABASE_FNAME, os.path.join(self.defaultSaveDir, 'tracks.db'))
+            self.tracks_db_fname = './tracks.db'
             self.settings[SETTING_TRACKS_DATABASE_FNAME] = self.tracks_db_fname
         except:
             self.tracks_db_fname = os.path.join(os.getcwd(), 'tracks.db')
@@ -1470,17 +1457,17 @@ class MainWindow(QMainWindow, WindowMixin):
         settings[SETTING_FILL_COLOR] = self.fillColor
         settings[SETTING_RECENT_FILES] = self.recentFiles
         settings[SETTING_ADVANCE_MODE] = not self._beginner
-        if self.defaultSaveDir and os.path.exists(self.defaultSaveDir):
-            settings[SETTING_SAVE_DIR] = ustr(self.defaultSaveDir)
-        else:
-            settings[SETTING_SAVE_DIR] = ""
+        # if self.defaultSaveDir and os.path.exists(self.defaultSaveDir):
+        #     settings[SETTING_SAVE_DIR] = ustr(self.defaultSaveDir)
+        # else:
+        #     settings[SETTING_SAVE_DIR] = ""
 
         if self.lastOpenDir and os.path.exists(self.lastOpenDir):
             settings[SETTING_LAST_OPEN_DIR] = self.lastOpenDir
         else:
             settings[SETTING_LAST_OPEN_DIR] = ""
 
-        settings[SETTING_AUTO_SAVE] = self.autoSaving.isChecked()
+        # settings[SETTING_AUTO_SAVE] = self.autoSaving.isChecked()
         settings[SETTING_SINGLE_CLASS] = self.singleClassMode.isChecked()
         settings[SETTING_PAINT_LABEL] = self.paintLabelsOption.isChecked()
         settings[SETTING_PRESERVE_BASEMAP_CONFIG] = self.preserveBasemapConfig.isChecked()
@@ -1557,13 +1544,13 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def openPrevImg(self, _value=False):
         # Proceding prev image without dialog if having any label
-        if self.autoSaving.isChecked():
-            if self.defaultSaveDir is not None:
-                if self.dirty is True:
-                    self.saveFile()
-            else:
-                self.changeSavedirDialog()
-                return
+        # if self.autoSaving.isChecked():
+        #     if self.defaultSaveDir is not None:
+        #         if self.dirty is True:
+        #             self.saveFile()
+        #     else:
+        #         self.changeSavedirDialog()
+        #         return
 
         if not self.mayContinue():
             return
@@ -1583,13 +1570,13 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def openNextImg(self, _value=False):
         # Proceding prev image without dialog if having any label
-        if self.autoSaving.isChecked():
-            if self.defaultSaveDir is not None:
-                if self.dirty is True:
-                    self.saveFile()
-            else:
-                self.changeSavedirDialog()
-                return
+        # if self.autoSaving.isChecked():
+        #     if self.defaultSaveDir is not None:
+        #         if self.dirty is True:
+        #             self.saveFile()
+        #     else:
+        #         self.changeSavedirDialog()
+        #         return
 
         if not self.mayContinue():
             return
@@ -1843,11 +1830,13 @@ def get_main_app(argv=[]):
     app.setWindowIcon(newIcon("app"))
     # Tzutalin 201705+: Accept extra agruments to change predefined class file
     # Usage : labelImg.py image predefClassFile saveDir
+    # win = MainWindow(argv[1] if len(argv) >= 2 else None,
+    #                  argv[2] if len(argv) >= 3 else os.path.join(
+    #                      os.path.dirname(sys.argv[0]),
+    #                      'data', 'predefined_classes.txt'),
+    #                  argv[3] if len(argv) >= 4 else None)
     win = MainWindow(argv[1] if len(argv) >= 2 else None,
-                     argv[2] if len(argv) >= 3 else os.path.join(
-                         os.path.dirname(sys.argv[0]),
-                         'data', 'predefined_classes.txt'),
-                     argv[3] if len(argv) >= 4 else None)
+                     argv[2] if len(argv) >= 3 else os.path.join(os.path.dirname(sys.argv[0]), 'data', 'predefined_classes.txt'))
     win.show()
     return app, win
 
