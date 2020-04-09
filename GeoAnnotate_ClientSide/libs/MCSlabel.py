@@ -15,9 +15,6 @@ class MCSlabel():
 
     @classmethod
     def from_db_row_dict(cls, row_dict):
-        # columns = ['track_uid', 'track_human_readable_name',
-        #            'label_id', 'label_uid', 'track_id', 'label_dt', 'label_name',
-        #            'lon0', 'lat0', 'lon1', 'lat1', 'lon2', 'lat2', 'sourcedata_fname']
         label = MCSlabel(None, None, None, None, None)
         label.name = row_dict['label_name']
         label.uid = row_dict['label_uid']

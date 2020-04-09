@@ -201,25 +201,6 @@ class Shape(object):
                 self._painter.drawEllipse(rect)
 
 
-
-            # Draw text at the top-left
-            # if self.paintLabel:
-            #     min_x = sys.maxsize
-            #     min_y = sys.maxsize
-            #     for point in self.points:
-            #         min_x = min(min_x, point.x())
-            #         min_y = min(min_y, point.y())
-            #     if min_x != sys.maxsize and min_y != sys.maxsize:
-            #         font = QFont()
-            #         font.setPointSize(8)
-            #         font.setBold(True)
-            #         self._painter.setFont(font)
-            #         if (self.label == None):
-            #             self.label = ""
-            #         if (min_y < MIN_Y_LABEL):
-            #             min_y += MIN_Y_LABEL
-            #         self._painter.drawText(min_x, min_y, self.label)
-
             self._painter.end()
 
 

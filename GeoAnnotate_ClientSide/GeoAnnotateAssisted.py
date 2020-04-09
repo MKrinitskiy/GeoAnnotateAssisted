@@ -15,10 +15,6 @@ import resources
 import sys
 python_path = sys.executable
 
-#region setting up PROJ_LIB
-
-#endregion setting up PROJ_LIB
-
 #region import Qt
 try:
     from PyQt5.QtGui import *
@@ -887,7 +883,7 @@ class MainWindow(QMainWindow, WindowMixin):
             shape = Shape(label=label, parent_canvas=self.canvas)
 
             # for (x, y),(lon,lat) in zip(latlonPoints):
-            for (pt_name, pt_latlon) in label.pts.items():
+            for (pt_name, pt_latlon) in sorted(label.pts.items(), key=lambda x: x[0]):
                 x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
                 shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
             shape.close()
@@ -1007,7 +1003,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 for idx,label_row in track_labels_df.iterrows():
                     curr_label = MCSlabel.from_db_row_dict(label_row.to_dict())
                     shape = Shape(label=curr_label, parent_canvas=self.canvas)
-                    for (pt_name, pt_latlon) in curr_label.pts.items():
+                    for (pt_name, pt_latlon) in sorted(curr_label.pts.items(), key=lambda x: x[0]):
                         x_pic, y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
                         shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
                     shape.close()
@@ -1317,22 +1313,6 @@ class MainWindow(QMainWindow, WindowMixin):
             fileWidgetItem.setSelected(True)
 
         if unicodeFilePath and os.path.exists(unicodeFilePath):
-            # if LabelFile.isLabelFile(unicodeFilePath):
-            #     try:
-            #         self.labelFile = LabelFile(unicodeFilePath)
-            #     except LabelFileError as e:
-            #         self.errorMessage(u'Error opening file',
-            #                           (u"<p><b>%s</b></p>"
-            #                            u"<p>Make sure <i>%s</i> is a valid label file.")
-            #                           % (e, unicodeFilePath))
-            #         self.status("Error reading %s" % unicodeFilePath)
-            #         return False
-            #     self.imageData = self.labelFile.imageData
-            #     image = QImage.fromData(self.imageData)
-            # else:
-
-            # Load image:
-            # read data first and store for saving into label file.
             self.curr_dt = DateTimeFromDataFName(unicodeFilePath)
 
             try:
@@ -1359,12 +1339,12 @@ class MainWindow(QMainWindow, WindowMixin):
                                   u"<p>Make sure <i>%s</i> is a valid image file." % unicodeFilePath)
                 self.status("Error reading %s" % unicodeFilePath)
                 return False
+
             self.status("Loaded %s" % os.path.basename(unicodeFilePath))
             self.image = image
             self.filePath = unicodeFilePath
             self.canvas.loadPixmap(QPixmap.fromImage(image))
-            # if self.labelFile:
-            #     self.loadLabels(self.labelFile.shapes)
+
             self.setClean()
             self.canvas.setEnabled(True)
             self.adjustScale(initial=True)
@@ -1375,20 +1355,6 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.refreshBasemap.setEnabled(True)
             self.actions.zoomHires.setEnabled(True)
             self.actions.switchDataChannel.setEnabled(True)
-
-            # Label xml file and show bound box according to its filename
-            # if self.usingPascalVocFormat is True:
-            # if self.defaultSaveDir is not None:
-            #     basename = os.path.basename(
-            #         os.path.splitext(self.filePath)[0])
-            #     MCCXMLPath = os.path.join(self.defaultSaveDir, basename + MCC_XML_EXT)
-            #
-            #     if os.path.isfile(MCCXMLPath):
-            #         self.loadArbitraryXMLByFilename(MCCXMLPath)
-            # else:
-            #     MCCXMLPath = os.path.splitext(filePath)[0] + MCC_XML_EXT
-            #     if os.path.isfile(MCCXMLPath):
-            #         self.loadArbitraryXMLByFilename(MCCXMLPath)
 
             labels_from_database = MCSlabel.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
             self.loadLabels(labels_from_database)
@@ -1621,18 +1587,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def saveFile(self, _value=False):
-        # if self.defaultSaveDir is not None and len(ustr(self.defaultSaveDir)):
-        #     if self.filePath:
-        #         imgFileName = os.path.basename(self.filePath)
-        #         savedFileName = os.path.splitext(imgFileName)[0]
-        #         savedPath = os.path.join(ustr(self.defaultSaveDir), savedFileName)
-        #         self._saveFile(savedPath)
-        # else:
-        #     imgFileDir = os.path.dirname(self.filePath)
-        #     imgFileName = os.path.basename(self.filePath)
-        #     savedFileName = os.path.splitext(imgFileName)[0]
-        #     savedPath = os.path.join(imgFileDir, savedFileName)
-        #     self._saveFile(savedPath if self.labelFile else self.saveFileDialog())
         if self.saveLabels():
             self.setClean()
             self.statusBar().showMessage('Saved labels to database')
@@ -1662,15 +1616,6 @@ class MainWindow(QMainWindow, WindowMixin):
         return ''
 
 
-    # def _saveFile(self):
-    #     # if annotationFilePath and self.saveLabels(annotationFilePath):
-    #     #     self.setClean()
-    #     #     self.statusBar().showMessage('Saved to  %s' % annotationFilePath)
-    #     #     self.statusBar().show()
-    #     if self.saveLabels():
-    #         self.setClean()
-    #         self.statusBar().showMessage('Saved labels to database')
-    #         self.statusBar().show()
 
 
     def closeFile(self, _value=False):
