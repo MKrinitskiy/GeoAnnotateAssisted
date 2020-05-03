@@ -19,17 +19,24 @@ def DoesPathExistAndIsFile(pathStr):
     else:
         return False
 
-def find_files(directory, pattern):
+
+def find_files(directory, pattern, maxdepth=None):
     flist = []
     for root, dirs, files in os.walk(directory):
         for basename in files:
             if fnmatch.fnmatch(basename, pattern):
                 filename = os.path.join(root, basename)
-                filename = filename.replace('\\', '/')
-                flist.append(filename)
+                filename = filename.replace('\\\\', os.sep)
+                if maxdepth is None:
+                    flist.append(filename)
+                else:
+                    if filename.count(os.sep)-directory.count(os.sep) <= maxdepth:
+                        flist.append(filename)
     return flist
 
+
 def find_directories(directory, pattern=None, maxdepth=None):
+    dlist = []
     for root, dirs, files in os.walk(directory):
         for d in dirs:
             if pattern is None:
@@ -39,16 +46,18 @@ def find_directories(directory, pattern=None, maxdepth=None):
                 retname = os.path.join(root, d, '')
                 retname = retname.replace('\\\\', os.sep)
                 if maxdepth is None:
-                    yield retname
+                    # yield retname
+                    dlist.append(retname)
                 else:
                     if retname.count(os.sep)-directory.count(os.sep) <= maxdepth:
                         yield retname
+                        dlist.append(retname)
+    return dlist
 
 
 def EnsureDirectoryExists(pathStr):
     if not DoesPathExistAndIsDirectory(pathStr):
         try:
-            # os.mkdir(pathStr)
             pathlib.Path(pathStr).mkdir(parents=True, exist_ok=True)
         except Exception as ex:
             err_fname = './errors.log'
