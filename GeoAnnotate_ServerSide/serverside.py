@@ -5,19 +5,35 @@ if sys.platform == 'win32':
 elif ((sys.platform == 'linux') | (sys.platform == 'darwin')):
     os.environ['PROJ_LIB'] = os.path.join(sys.executable.replace('bin/python', ''), 'share', 'proj')
 
-from flask import Flask, request, send_file, make_response, Response
+from flask import Flask, request, send_file, make_response, Response, jsonify
 import numpy as np
 from FlaskExtended import *
 from Support_defs import *
+from libs.service_defs import *
 from libs.TrackingBasemapHelper import *
 import binascii, logging, time
 from PIL import Image
 from io import BytesIO
+from libs.CNNPredictor import CNNPredictor
+import json
+import sys
+import collections
+import torch
+from libs.parse_args import parse_args
 
+
+args = sys.argv[1:]
+args = parse_args(args)
+
+if 'gpu' in args.__dict__.keys():
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
 
 app = FlaskExtended(__name__)
 app.config['SECRET_KEY'] = binascii.hexlify(os.urandom(24))
-file_handler = logging.FileHandler('./logs/app.log')
+
+logging.basicConfig(filename='./app.log', level=logging.INFO, format='%(asctime)s %(message)s')
+logging.info('Started AI-assisted GeoAnnotate server-side app')
+logging.info('args: %s' % sys.argv[1:])
 
 
 tmp_imag_dir = os.path.join(os.getcwd(), 'tmp')
@@ -163,6 +179,47 @@ def SwitchSourceData_progress(curr_fname, webapi_client_id = ''):
 
 
 
+def PredictMCS_progress(curr_fname, webapi_client_id = ''):
+    if webapi_client_id == '':
+        raise Exception('client ID not specified!')
+    elif webapi_client_id not in app.bmhelpers.keys():
+        raise Exception('there is no renderer object for this client yet! (required for CNN to apply to renderer data)')
+
+    x = 0
+    total_steps = 4
+    while True:
+        step_description = ''
+        if x == 0:
+            step_description = 'LoadingCNN'
+        elif x == 1:
+            step_description = 'ReadingDataFile'
+        elif x == 2:
+            step_description = 'PreprocessingData'
+        elif x == 3:
+            step_description = 'ApplyingNeuralNetwork'
+
+
+        yield 'step %d / %d : %s\n' % (x+1, total_steps, step_description)
+        print('step %d / %d ^ %s' % (x+1, total_steps, step_description))
+
+        if x == 0:
+            if app.cnn is None:
+                app.cnn = CNNPredictor(args)
+            else:
+                pass
+        elif x == 1:
+            app.cnn.LoadSourceData(curr_fname, webapi_client_id)
+        elif x == 2:
+            app.cnn.PreprocessSourceData(webapi_client_id)
+        elif x == 3:
+            app.cnn.ApplyCNN(webapi_client_id)
+            yield 'READY\n'
+            print('READY')
+            break
+        x = x + 1
+
+
+
 
 # @app.route('/exec', methods=['POST', 'GET'])
 @app.route('/exec', methods=['GET'])
@@ -214,7 +271,10 @@ def exec():
             response.headers['ErrorDesc'] = 'FileNotFound'
             return response
         else:
-            return Response(MakeTrackingBasemapHelper_progress(curr_fname, calculateLatLonLimits, resolution, webapi_client_id=webapi_client_id),
+            return Response(MakeTrackingBasemapHelper_progress(curr_fname,
+                                                               calculateLatLonLimits,
+                                                               resolution,
+                                                               webapi_client_id=webapi_client_id),
                             mimetype='text/stream')
 
     elif command == 'SetNewLatLonLimits':
@@ -232,7 +292,6 @@ def exec():
             response = make_response('SetNewLatLonLimits: UnknownError')
             response.headers['ErrorDesc'] = 'UnknownError'
             return response
-
 
     elif command == 'SwitchSourceData':
         try:
@@ -272,7 +331,23 @@ def exec():
         else:
             return Response(SwitchSourceData_progress(curr_fname, webapi_client_id=webapi_client_id), mimetype='text/stream')
 
+    elif command == 'PredictMCScurrentData':
+        try:
+            webapi_client_id = request.args['webapi_client_id']
+        except Exception as ex:
+            print(ex)
+            ReportException('./logs/app.log', ex)
+            response = make_response('client webapi ID was not specified')
+            response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
+            return response
 
+        if type(app.bmhelpers[webapi_client_id]) is not TrackingBasemapHelperClass:
+            print('Data renderer is empty. You need to specify source data imagery first!')
+            response = make_response('Data renderer is empty. You need to specify source data imagery first!')
+            response.headers['ErrorDesc'] = 'DataNotLoaded'
+            return response
+
+        return Response(PredictMCS_progress(app.bmhelpers[webapi_client_id].dataSourceFile, webapi_client_id=webapi_client_id), mimetype='text/stream')
 
 
 @app.route('/images', methods=['GET'])
@@ -315,6 +390,36 @@ def image():
         return response
 
 
+
+@app.route('/predictions', methods=['GET'])
+def predictions():
+    try:
+        try:
+            webapi_client_id = request.args['webapi_client_id']
+        except Exception as ex:
+            print(ex)
+            ReportException('./logs/app.log', ex)
+            response = make_response('client webapi ID was not specified')
+            response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
+            return response
+
+        preds = app.cnn.GetPredictions(webapi_client_id, clear=True)
+
+        tmp_fname = './cache/webapi_cache/labels-predicted-%s.pickle' % binascii.hexlify(os.urandom(5)).decode('ascii')
+        with open(tmp_fname, 'wb') as f:
+            pickle.dump(preds, f, pickle.HIGHEST_PROTOCOL)
+        response = make_response(send_file(tmp_fname, mimetype='application/octet-stream'))
+        response.headers['fileName'] = os.path.basename(tmp_fname)
+        return response
+    except Exception as ex:
+        print(ex)
+        ReportException('./logs/error.log', ex)
+        response = make_response('Unable to predict MCS labels')
+        response.headers['ErrorDesc'] = 'MCSLabelsPredicting'
+        return response
+
+
+
 @app.route('/imdone', methods=['GET'])
 def imdone():
     try:
@@ -341,4 +446,4 @@ def imdone():
 
 
 
-app.run(host='0.0.0.0',port=1999)
+app.run(host='127.0.0.1', port=1999)

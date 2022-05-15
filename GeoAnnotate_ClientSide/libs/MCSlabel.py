@@ -3,6 +3,7 @@ import os
 from .DatabaseOps import DatabaseOps
 import pandas as pd
 import numpy as np
+from libs.srvMCSlabel import srvMCSlabel
 
 
 class MCSlabel():
@@ -47,3 +48,42 @@ class MCSlabel():
                 labels.append(label)
 
         return labels
+
+    @classmethod
+    def MCSLabelFrom_srvMCSlabel(cls, srvMCS: srvMCSlabel):
+
+        center_pt = [0.5*(srvMCS.ltc_lon+srvMCS.rbc_lon), 0.5*(srvMCS.ltc_lat+srvMCS.rbc_lat)]
+        lat_arc = np.abs(srvMCS.ltc_lat-srvMCS.rbc_lat)
+        lat_len = 111*lat_arc
+        lon_arc = np.abs(srvMCS.ltc_lon-srvMCS.rbc_lon)
+        lon_len = 111*np.cos(np.deg2rad(center_pt[1]))*lon_arc
+        if lat_len > lon_len:
+            lon0 = center_pt[0]
+            lat0 = center_pt[1] - 0.5*lat_arc
+            lon1 = center_pt[0]
+            lat1 = center_pt[1] + 0.5*lat_arc
+            lon2 = center_pt[0] + 0.5*lon_arc
+            lat2 = center_pt[1]
+        else:
+            lon0 = center_pt[0]-0.5*lon_arc
+            lat0 = center_pt[1]
+            lon1 = center_pt[0]+0.5*lon_arc
+            lat1 = center_pt[1]
+            lon2 = center_pt[0]
+            lat2 = center_pt[1]+0.5*lat_arc
+
+        vars_dict = {'label_id': '',
+                     'label_uid': srvMCS.uid,
+                     'label_dt': srvMCS.dt,
+                     'label_name': srvMCS.class_name,
+                     'lon0': lon0,
+                     'lat0': lat0,
+                     'lon1': lon1,
+                     'lat1': lat1,
+                     'lon2': lon2,
+                     'lat2': lat2,
+                     'sourcedata_fname': srvMCS.sourcedata_fname}
+
+        mcs = MCSlabel.from_db_row_dict(vars_dict)
+
+        return mcs

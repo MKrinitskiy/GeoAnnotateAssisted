@@ -4,7 +4,7 @@
 import codecs
 import distutils.spawn
 import os.path
-import platform, re, sys, subprocess
+import platform, re, sys, subprocess, logging
 from functools import partial
 from collections import defaultdict
 import threading
@@ -33,10 +33,17 @@ except ImportError:
 #endregion
 
 from libs import *
+from libs.parse_args import parse_args
 
 
 
 __appname__ = 'labelImg'
+
+args = sys.argv[1:]
+args = parse_args(args)
+logging.basicConfig(filename='./app.log', level=logging.INFO, format='%(asctime)s %(message)s')
+logging.info('Started AI-assisted GeoAnnotate client-side app')
+logging.info('args: %s' % sys.argv[1:])
 
 # Utility functions and classes.
 def have_qstring():
@@ -839,7 +846,7 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             shape = self.canvas.selectedShape
             if shape:
-                self.shapesToItems[shape].setSelected(True)
+               self.shapesToItems[shape].setSelected(True)
             else:
                 self.labelList.clearSelection()
         self.actions.delete.setEnabled(selected)
@@ -896,6 +903,26 @@ class MainWindow(QMainWindow, WindowMixin):
         self.loadTracks()
 
         return
+
+
+    def loadPredictedLabels(self, srvMCSlabels):
+        s = []
+
+        # for label, points, latlonPoints, line_color, fill_color, isEllipse in shapes:
+        for label_class,labels_of_class  in srvMCSlabels.items():
+            for label in labels_of_class:
+                mcs = MCSlabel.MCSLabelFrom_srvMCSlabel(label)
+                shape = Shape(label=mcs, parent_canvas=self.canvas)
+
+                for (pt_name, pt_latlon) in sorted(mcs.pts.items(), key=lambda x: x[0]):
+                    x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                    shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
+                shape.close()
+                s.append(shape)
+
+                self.addLabel(shape)
+
+        self.canvas.loadShapes(s, extend=True)
 
 
     def loadTracks(self):
@@ -1359,6 +1386,9 @@ class MainWindow(QMainWindow, WindowMixin):
             labels_from_database = MCSlabel.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
             self.loadLabels(labels_from_database)
 
+            labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
+            if labels_cnn_predicted is not None:
+                self.loadPredictedLabels(labels_cnn_predicted)
 
             self.setWindowTitle(__appname__ + ' ' + filePath)
 
@@ -1438,6 +1468,7 @@ class MainWindow(QMainWindow, WindowMixin):
         settings[SETTING_PAINT_LABEL] = self.paintLabelsOption.isChecked()
         settings[SETTING_PRESERVE_BASEMAP_CONFIG] = self.preserveBasemapConfig.isChecked()
         settings.save()
+
     ## User Dialogs ##
 
     # def loadRecent(self, filename):
@@ -1749,7 +1780,7 @@ def read(filename, default=None):
     try:
         if filename.lower().endswith('.nc'):
             if default is None:
-                helper = TrackingBasemapHelperClass(filename)
+                helper = TrackingBasemapHelperClass(filename, args)
                 helper.initiate(resolution='f')
             else:
                 helper = default
@@ -1780,8 +1811,11 @@ def get_main_app(argv=[]):
     #                      os.path.dirname(sys.argv[0]),
     #                      'data', 'predefined_classes.txt'),
     #                  argv[3] if len(argv) >= 4 else None)
-    win = MainWindow(argv[1] if len(argv) >= 2 else None,
-                     argv[2] if len(argv) >= 3 else os.path.join(os.path.dirname(sys.argv[0]), 'data', 'predefined_classes.txt'))
+
+    # win = MainWindow(argv[1] if len(argv) >= 2 else None,
+    #                  argv[2] if len(argv) >= 3 else os.path.join(os.path.dirname(sys.argv[0]), 'data', 'predefined_classes.txt'))
+    win = MainWindow(None, os.path.join(os.path.dirname(sys.argv[0]), 'data', 'predefined_classes.txt'))
+
     win.show()
     return app, win
 
@@ -1790,6 +1824,7 @@ def main():
     '''construct main app and run it'''
     app, _win = get_main_app(sys.argv)
     return app.exec_()
+
 
 if __name__ == '__main__':
     sys.exit(main())

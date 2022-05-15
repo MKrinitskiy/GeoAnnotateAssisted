@@ -5,6 +5,10 @@
 
 # from matplotlib import pyplot as plt
 # from mpl_toolkits.basemap import Basemap
+import json
+import logging
+import sys
+
 import numpy as np
 from netCDF4 import Dataset
 import io, cv2, pickle, uuid, threading, requests, re
@@ -12,6 +16,8 @@ from io import BytesIO
 import pandas as pd
 from libs.ga_defs import *
 import binascii
+from libs.srvMCSlabel import srvMCSlabel
+import ast
 
 
 
@@ -83,7 +89,8 @@ nu_central = {'ch4': 2547.771 ,
 
 
 class TrackingBasemapHelperClass(object):
-    def __init__(self, dataSourceFile):
+    def __init__(self, dataSourceFile, app_args):
+        self.app_args = app_args
         self.dataSourceFile = dataSourceFile
         self.zoom = 1.0
         self.cLat = None
@@ -107,27 +114,6 @@ class TrackingBasemapHelperClass(object):
                                      'lat': 'latitudes',
                                      'lon': 'longitudes'}
         self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
-        # self.channelColormaps = ['jet', self.create_ch5_cmap(), 'spring']
-
-
-
-    # def create_ch5_cmap(self):
-    #     from matplotlib import cm
-    #     from matplotlib.colors import ListedColormap
-    #
-    #     ch5_vmin = 200.
-    #     ch5_vmax = 320.
-    #     ch5_vm1 = 237.
-    #     jet_cnt = int(512 * (ch5_vm1 - ch5_vmin) / (ch5_vmax - ch5_vmin))
-    #     gray_cnt = 512 - jet_cnt
-    #     jet = cm.get_cmap('jet', jet_cnt)
-    #     gray = cm.get_cmap('gray', gray_cnt)
-    #     jetcolors = jet(np.linspace(0, 1, jet_cnt))
-    #     graycolors = gray(np.linspace(0, 1, gray_cnt))
-    #     newcolors = np.concatenate([jetcolors[::-1], graycolors[::-1]], axis=0)
-    #     newcm = ListedColormap(newcolors)
-    #     return newcm
-
 
     @classmethod
     def t_brightness_calculate(self, data, channelname = 'ch9'):
@@ -179,13 +165,6 @@ class TrackingBasemapHelperClass(object):
         self.lats_re = np.reshape(self.lats, (-1,))
         self.lons_re = np.reshape(self.lons, (-1,))
 
-        # if calculateLatLonLimits:
-        #     self.llcrnrlon = self.lons_re.min()
-        #     self.llcrnrlat = self.lats_re.min()
-        #     self.urcrnrlon = self.lons_re.max()
-        #     self.urcrnrlat = self.lats_re.max()
-        #     self.ComputeCenterAndRange()
-
 
     def ComputeCenterAndRange(self):
         self.cLat = (self.urcrnrlat + self.llcrnrlat) * 0.5
@@ -196,58 +175,6 @@ class TrackingBasemapHelperClass(object):
         self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
         self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
         self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
-
-
-    # def listAvailablePickledBasemapObjects(self):
-    #     EnsureDirectoryExists('./logs/')
-    #     EnsureDirectoryExists(os.path.dirname(basemaps_pickled_list_csvfile))
-    #     if os.path.exists(basemaps_pickled_list_csvfile) and os.path.isfile(basemaps_pickled_list_csvfile):
-    #         self.df_pickled_basemaps_list = pd.read_csv(basemaps_pickled_list_csvfile, sep=';')
-    #         self.df_pickled_basemaps_list['FileNotPresent'] = [(not DoesPathExistAndIsFile(s)) for s in self.df_pickled_basemaps_list.bm_fname]
-    #         self.df_pickled_basemaps_list = self.df_pickled_basemaps_list.drop(self.df_pickled_basemaps_list[self.df_pickled_basemaps_list.FileNotPresent].index)
-    #     else:
-    #         columns = [('llcrnrlon', float),
-    #                    ('llcrnrlat', float),
-    #                    ('urcrnrlon', float),
-    #                    ('urcrnrlat', float),
-    #                    ('resolution', str),
-    #                    ('bm_fname', str)]
-    #         self.df_pickled_basemaps_list = pd.DataFrame({k: pd.Series(dtype=t) for k, t in columns})
-
-
-    # def loadPickledBasemapObj(self, resolution, eps=1.e-4):
-    #     self.listAvailablePickledBasemapObjects()
-    #
-    #     df_filtered = self.df_pickled_basemaps_list[(np.abs(self.df_pickled_basemaps_list.llcrnrlon-self.llcrnrlon)<=eps) &
-    #                                                 (np.abs(self.df_pickled_basemaps_list.llcrnrlat-self.llcrnrlat)<=eps) &
-    #                                                 (np.abs(self.df_pickled_basemaps_list.urcrnrlon-self.urcrnrlon)<=eps) &
-    #                                                 (np.abs(self.df_pickled_basemaps_list.urcrnrlat-self.urcrnrlat)<=eps) &
-    #                                                 (self.df_pickled_basemaps_list.resolution == resolution)]
-    #     if df_filtered.shape[0] > 0:
-    #         try:
-    #             bm = pickle.load(open(df_filtered.bm_fname.iloc[0], 'rb'))
-    #             return bm
-    #         except Exception as ex:
-    #             ReportException('./logs/errors.log', ex)
-    #             print('An exception was thrown. Take a look into the ./logs/errors.log file')
-    #             return None
-    #     else:
-    #         return None
-
-
-
-    # def savePickledBasemapObj(self, resolution):
-    #     fname = './cache/' + str(uuid.uuid4()) + '.pickle'
-    #     pickle.dump(self.bm, open(fname, 'wb'), -1)
-    #     self.df_pickled_basemaps_list = self.df_pickled_basemaps_list.append({'llcrnrlon': self.llcrnrlon,
-    #                                                                           'llcrnrlat': self.llcrnrlat,
-    #                                                                           'urcrnrlon': self.urcrnrlon,
-    #                                                                           'urcrnrlat': self.urcrnrlat,
-    #                                                                           'resolution': resolution,
-    #                                                                           'bm_fname': fname},
-    #                                                                          ignore_index=True)
-    #     self.df_pickled_basemaps_list.to_csv(basemaps_pickled_list_csvfile, sep=';', index=False)
-
 
 
     def deflate_recieved_dict(self, rec_dict):
@@ -270,6 +197,8 @@ class TrackingBasemapHelperClass(object):
     def send_close_signal(self):
         url1 = 'http://%s:1999/imdone?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
         try:
+            if self.app_args.http_logging:
+                logging.info(url1)
             req1 = requests.get(url1)
         except Exception as ex:
             print('Request failed. Please check the connection.')
@@ -291,6 +220,8 @@ class TrackingBasemapHelperClass(object):
         url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
         try:
             req1 = requests.get(url1, stream=True)
+            if self.app_args.http_logging:
+                logging.info(url1)
         except Exception as ex:
             print('Request failed. Please check the connection.')
             ReportException('./logs/errors.log', ex)
@@ -314,6 +245,8 @@ class TrackingBasemapHelperClass(object):
 
                 try:
                     req2 = requests.get(url2)
+                    if self.app_args.http_logging:
+                        logging.info(url2)
                 except Exception as ex:
                     print('Request failed. Please check the connection.')
                     ReportException('./logs/errors.log', ex)
@@ -338,58 +271,6 @@ class TrackingBasemapHelperClass(object):
                     raise Exception('Generated images transfer failed.')
 
 
-    # def createBasemapObj(self, resolution='c'):
-    #
-    #     self.bm = self.loadPickledBasemapObj(resolution)
-    #     if self.bm == None:
-    #         self.bm = Basemap(resolution=resolution, projection='cyl',
-    #                           llcrnrlon = self.llcrnrlon,
-    #                           llcrnrlat = self.llcrnrlat,
-    #                           urcrnrlon = self.urcrnrlon,
-    #                           urcrnrlat = self.urcrnrlat,
-    #                           area_thresh=20000)
-    #         self.savePickledBasemapObj(resolution)
-
-
-
-    # def PlotBasemapBackground(self):
-    #     self.BasemapFigure = plt.figure(figsize=(8, 8), dpi=300)
-    #     # self.bm.drawcounties()
-    #     self.bm.drawcoastlines()
-    #     # self.bm.drawrivers(linewidth=0.5, color='blue')
-    #     m = self.bm.drawmeridians([self.lons_re.min() + i * (self.lons_re.max() - self.lons_re.min()) / 5. for i in range(6)])
-    #     p = self.bm.drawparallels([self.lats_re.min() + i * (self.lats_re.max() - self.lats_re.min()) / 5. for i in range(6)])
-    #     plt.axis("off")
-    #
-    #     buf = io.BytesIO()
-    #     self.BasemapFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
-    #     plt.close()
-    #     buf.seek(0)
-    #     self.BasemapLayerImage = np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8))
-
-
-    # def PlotDataLayer(self):
-    #     # coords_condition = ((self.lats <= self.urcrnrlat) & (self.lats >= self.llcrnrlat) & (self.lons <= self.urcrnrlon) & (self.lons >= self.llcrnrlon))
-    #
-    #     for dataname,cmap in zip(self.channelNames, self.channelColormaps):
-    #         DataFigure = plt.figure(figsize=(8, 8), dpi=300)
-    #         data = self.__dict__['data_%s' % dataname]
-    #         vmin = data[data.mask==False].min()
-    #         vmax = data[data.mask==False].max()
-    #         # self.bm.pcolormesh(self.lons.data, self.lats.data, data,
-    #         #                    latlon=True, alpha=1.0,
-    #         #                    vmin = vmin, vmax = vmax, cmap=cmap)
-    #         self.bm.pcolor(self.lons.data, self.lats.data, data,
-    #                            latlon=True, alpha=1.0,
-    #                            vmin=vmin, vmax=vmax, cmap=cmap)
-    #         plt.axis("off")
-    #         buf = io.BytesIO()
-    #         DataFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
-    #         plt.close()
-    #         buf.seek(0)
-    #         self.__dict__['DataLayerImage_%s'%dataname] = np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8))
-
-
     def FuseBasemapWithData(self, alpha = 0.3, beta = 0.7):
         BasemapImageCV = cv2.imdecode(self.BasemapLayerImage, cv2.IMREAD_COLOR)
         DataLayerImageCV = cv2.imdecode(self.__dict__['DataLayerImage_%s' % self.dataToPlot], cv2.IMREAD_COLOR)
@@ -402,6 +283,8 @@ class TrackingBasemapHelperClass(object):
         url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
         try:
             req1 = requests.get(url1, stream=True)
+            if self.app_args.http_logging:
+                logging.info(url1)
         except Exception as ex:
             print('Request failed. Please check the connection.')
             ReportException('./logs/errors.log', ex)
@@ -424,6 +307,8 @@ class TrackingBasemapHelperClass(object):
 
                 try:
                     req2 = requests.get(url2)
+                    if self.app_args.http_logging:
+                        logging.info(url2)
                 except Exception as ex:
                     print('Request failed. Please check the connection.')
                     ReportException('./logs/errors.log', ex)
@@ -454,6 +339,8 @@ class TrackingBasemapHelperClass(object):
         url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
         try:
             req1 = requests.get(url1, stream=True)
+            if self.app_args.http_logging:
+                logging.info(url1)
         except Exception as ex:
             print('Request failed. Please check the connection.')
             ReportException('./logs/errors.log', ex)
@@ -476,6 +363,8 @@ class TrackingBasemapHelperClass(object):
 
                 try:
                     req2 = requests.get(url2)
+                    if self.app_args.http_logging:
+                        logging.info(url2)
                 except Exception as ex:
                     print('Request failed. Please check the connection.')
                     ReportException('./logs/errors.log', ex)
@@ -493,6 +382,59 @@ class TrackingBasemapHelperClass(object):
                     self.deflate_recieved_dict(rec_dict)
                 else:
                     raise Exception('Generated images transfer failed.')
+
+
+
+    def RequestPredictedMCSlabels(self):
+        url1 = 'http://%s:1999/exec?command=PredictMCScurrentData&webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        url2 = 'http://%s:1999/predictions?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        try:
+            req1 = requests.get(url1, stream=True)
+            if self.app_args.http_logging:
+                logging.info(url1)
+        except Exception as ex:
+            print('Request failed. Please check the connection.')
+            ReportException('./logs/errors.log', ex)
+            raise RequestFailedException()
+
+        print(req1.headers)
+        ctype = req1.headers['Content-Type']
+        m = re.match(r'.+charset=(.+)', ctype)
+        enc = 'utf-8'
+        if m is not None:
+            enc = m.groups()[0]
+            print('encoding detected: %s' % enc)
+        print(req1.status_code)
+
+        for line in streamlines_gen(req1):
+            print(line)
+            if line == 'READY':
+                print('got READY response')
+                print('requesting labels')
+
+                try:
+                    req2 = requests.get(url2)
+                    if self.app_args.http_logging:
+                        logging.info(url2)
+                except Exception as ex:
+                    print('Request failed. Please check the connection.')
+                    ReportException('./logs/errors.log', ex)
+                    raise RequestFailedException()
+                print(req2.status_code)
+                print(req2.headers)
+
+                rec_dict = None
+                with BytesIO() as bytesf:
+                    bytesf.write(req2.content)
+                    bytesf.seek(0)
+                    rec_dict = pickle.load(bytesf)
+
+                if rec_dict is not None:
+                    print(rec_dict)
+                else:
+                    logging.info('Received empty detected labels.')
+                    rec_dict = None
+        return rec_dict
 
 
 

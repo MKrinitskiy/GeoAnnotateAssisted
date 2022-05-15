@@ -727,8 +727,11 @@ class Canvas(QWidget):
             self.shapes = []
         self.repaint()
 
-    def loadShapes(self, shapes):
-        self.shapes = list(shapes)
+    def loadShapes(self, shapes, extend=False):
+        if extend:
+            self.shapes.extend(list(shapes))
+        else:
+            self.shapes = list(shapes)
         self.current = None
         self.repaint()
 
