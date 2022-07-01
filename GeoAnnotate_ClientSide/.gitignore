@@ -18,4 +18,4 @@ data/
 /tracks.db
 /tracks_copy.db
 /TODOs/
-
+*.log

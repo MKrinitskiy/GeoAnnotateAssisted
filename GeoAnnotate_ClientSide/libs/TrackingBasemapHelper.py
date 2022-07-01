@@ -10,8 +10,14 @@ import logging
 import sys
 
 import numpy as np
-from netCDF4 import Dataset
-import io, cv2, pickle, uuid, threading, requests, re
+# from netCDF4 import Dataset
+import io
+import cv2
+import pickle
+import uuid
+import threading
+import requests
+import re
 from io import BytesIO
 import pandas as pd
 from libs.ga_defs import *
@@ -133,38 +139,38 @@ class TrackingBasemapHelperClass(object):
             return bt
         return 0
 
-
-    def ReadSourceData(self, calculateLatLonLimits = True):
-        ds1 = Dataset(self.dataSourceFile, 'r')
-
-        self.lats = ds1.variables['lat'][:]
-        self.lons = ds1.variables['lon'][:]
-
-        for dataname in self.channelNames:
-            if dataname == 'ch5_ch9':
-                ch5_data = ds1.variables['ch5'][:]
-                ch5_data.mask = self.lats.mask
-                ch9_data = ds1.variables['ch5'][:]
-                ch9_data.mask = self.lats.mask
-                curr_data = {'ch5': ch5_data, 'ch9': ch9_data}
-                self.__dict__['data_%s' % dataname] = TrackingBasemapHelperClass.t_brightness_calculate(curr_data, dataname)
-            else:
-                curr_data = ds1.variables[dataname][:]
-                curr_data.mask = self.lats.mask
-                self.__dict__['data_%s' % dataname] = TrackingBasemapHelperClass.t_brightness_calculate(curr_data, dataname)
-
-
-
-        ds1.close()
-
-        while self.lats.min() < 0.0:
-            self.lats[self.lats < 0.0] = self.lats[self.lats < 0.0] + 360.
-        while self.lons.min() < 0.0:
-            self.lons[self.lons < 0.0] = self.lons[self.lons < 0.0] + 360.
-
-        self.lats_re = np.reshape(self.lats, (-1,))
-        self.lons_re = np.reshape(self.lons, (-1,))
-
+    #
+    # def ReadSourceData(self, calculateLatLonLimits = True):
+    #     ds1 = Dataset(self.dataSourceFile, 'r')
+    #
+    #     self.lats = ds1.variables['lat'][:]
+    #     self.lons = ds1.variables['lon'][:]
+    #
+    #     for dataname in self.channelNames:
+    #         if dataname == 'ch5_ch9':
+    #             ch5_data = ds1.variables['ch5'][:]
+    #             ch5_data.mask = self.lats.mask
+    #             ch9_data = ds1.variables['ch5'][:]
+    #             ch9_data.mask = self.lats.mask
+    #             curr_data = {'ch5': ch5_data, 'ch9': ch9_data}
+    #             self.__dict__['data_%s' % dataname] = TrackingBasemapHelperClass.t_brightness_calculate(curr_data, dataname)
+    #         else:
+    #             curr_data = ds1.variables[dataname][:]
+    #             curr_data.mask = self.lats.mask
+    #             self.__dict__['data_%s' % dataname] = TrackingBasemapHelperClass.t_brightness_calculate(curr_data, dataname)
+    #
+    #
+    #
+    #     ds1.close()
+    #
+    #     while self.lats.min() < 0.0:
+    #         self.lats[self.lats < 0.0] = self.lats[self.lats < 0.0] + 360.
+    #     while self.lons.min() < 0.0:
+    #         self.lons[self.lons < 0.0] = self.lons[self.lons < 0.0] + 360.
+    #
+    #     self.lats_re = np.reshape(self.lats, (-1,))
+    #     self.lons_re = np.reshape(self.lons, (-1,))
+    #
 
     def ComputeCenterAndRange(self):
         self.cLat = (self.urcrnrlat + self.llcrnrlat) * 0.5
@@ -215,7 +221,7 @@ class TrackingBasemapHelperClass(object):
 
 
     def initiate(self, resolution = 'c', calculateLatLonLimits=True):
-        self.ReadSourceData()
+        # self.ReadSourceData()
         url1 = 'http://%s:1999/exec?command=createbmhelper&src_fname=%s&resolution=%s&calculateLatLonLimits=%s&webapi_client_id=%s' % (self.remotehost, os.path.basename(self.dataSourceFile), resolution, str(calculateLatLonLimits), self.webapi_client_id)
         url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
         try:
@@ -333,7 +339,7 @@ class TrackingBasemapHelperClass(object):
 
     def SwitchSourceData(self, filename):
         self.dataSourceFile = filename
-        self.ReadSourceData()
+        # self.ReadSourceData()
 
         url1 = 'http://%s:1999/exec?command=SwitchSourceData&src_fname=%s&webapi_client_id=%s' % (self.remotehost, os.path.basename(self.dataSourceFile), self.webapi_client_id)
         url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)

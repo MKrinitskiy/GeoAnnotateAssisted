@@ -6,7 +6,7 @@ from .HashableQTreeWidgetItem import HashableQTreeWidgetItem
 from .HashableQStandardItem import HashableQStandardItem
 from .horsephrase_implementation import generate_horsephrase
 from .labelDialog import LabelDialog
-from .labelFile import LabelFile, LabelFileError
+# from .labelFile import LabelFile, LabelFileError
 from .lib import struct, newAction, newIcon, addActions, fmtShortcut, generateColorByText
 from .MCSlabel import *
 from .QTreeWidgetFunctions import *
@@ -21,6 +21,6 @@ from .DatabaseOps import *
 from .TrackSelectionDialog import TrackSelectionDialog
 from .ustr import ustr
 from .version import __version__
-from .xml_io import *
+# from .xml_io import *
 from .zoomWidget import ZoomWidget
 from .WarningMessage import *
