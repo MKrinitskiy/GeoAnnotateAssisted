@@ -4,9 +4,6 @@ import sys
 
 class Settings(object):
     def __init__(self, home):
-        # Be default, the home will be in the same folder as labelImg
-        # home = os.path.expanduser("~")
-        # home = os.path.dirname(os.path.abspath(__file__))
         self.data = {}
         self.path = os.path.join(home, '.GeoAnnotateSettings.pkl')
 

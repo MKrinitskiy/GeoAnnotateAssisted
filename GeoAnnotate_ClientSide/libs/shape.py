@@ -1,19 +1,14 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
-
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-except ImportError:
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
-
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 from libs.lib import distance
+from libs.ServiceDefs import enum
 import sys
 import numpy as np
 import uuid
 from .MCSlabel import *
+from .MClabel import *
 from datetime import datetime
 
 DEFAULT_LINE_COLOR = QColor(0, 255, 0, 128)
@@ -24,6 +19,7 @@ DEFAULT_VERTEX_FILL_COLOR = QColor(0, 255, 0, 255)
 DEFAULT_HVERTEX_FILL_COLOR = QColor(255, 0, 0)
 MIN_Y_LABEL = 10
 
+shape_types = enum(['ellipse', 'circle'])
 
 class Shape(object):
     P_SQUARE, P_ROUND = range(2)
@@ -44,21 +40,30 @@ class Shape(object):
 
     # def __init__(self, label=None, paintLabel=False, parent_canvas = None, uid = None, dt = None):
     def __init__(self, label=None, paintLabel=False, parent_canvas=None):
+        self.parent_canvas = parent_canvas
+        self.label_type = self.parent_canvas.parent.label_types
         if label is None:
-            # new shape
-            # self.uid = str(uuid.uuid4()).replace('-', '')
             self.uid = str(uuid.uuid4())
             if 'curr_dt' in parent_canvas.parent.__dict__.keys():
                 self.dt = parent_canvas.parent.curr_dt
             else:
                 self.dt = datetime.now()
-            self.label = MCSlabel('', self.uid, self.dt, None, None)
-        elif isinstance(label, MCSlabel):
+
+            if self.label_type == 'MCS':
+                self.label = MCSlabel('', self.uid, self.dt, None, None)
+            elif ((self.label_type == 'MC') | (self.label_type == 'PL')):
+                self.label = MClabel('', self.uid, self.dt, None, None)
+        elif (isinstance(label, MCSlabel) | isinstance(label, MClabel)):
             self.label = label
             self.uid = label.uid
             self.dt = label.dt
         else:
             raise NotImplementedError()
+
+        if self.label_type == 'MCS':
+            self.shape_type = shape_types.ellipse
+        elif ((self.label_type == 'MC') | (self.label_type == 'PL')):
+            self.shape_type = shape_types.circle
 
         self.points = []
         self.latlonPoints = []
@@ -68,8 +73,14 @@ class Shape(object):
 
         # mk
         self._painter = QPainter()
-        self.parent_canvas = parent_canvas
 
+        self.shapes_points_count = 3
+        if self.parent_canvas.parent.label_types == 'MCS':
+            self.shapes_points_count = 3
+        elif self.parent_canvas.parent.label_types == 'MC':
+            self.shapes_points_count = 2
+        elif self.parent_canvas.parent.label_types == 'PL':
+            self.shapes_points_count = 2
 
         self._highlightIndex = None
         self._highlightMode = self.NEAR_VERTEX
@@ -126,85 +137,92 @@ class Shape(object):
                 color = self.select_fill_color if self.selected else self.fill_color
                 self._painter.setBrush(color)
 
-            if len(self.points)==1:
-                xmin = min([p.x() for p in self.points])
-                ymin = min([p.y() for p in self.points])
-                xmax = max([p.x() for p in self.points])
-                ymax = max([p.y() for p in self.points])
-                rect = QRectF(QPointF(xmin, ymin), QPointF(xmax, ymax))
-                self._painter.drawEllipse(rect)
-            elif len(self.points)==2:
-                xmin = min([p.x() for p in self.points])
-                ymin = min([p.y() for p in self.points])
-                xmax = max([p.x() for p in self.points])
-                ymax = max([p.y() for p in self.points])
-                rect = QRectF(QPointF(xmin, ymin), QPointF(xmax, ymax))
-                self._painter.drawEllipse(rect)
-            elif len(self.points) == 3:
-                x0 = self.points[0].x()
-                x1 = self.points[1].x()
-                xc = 0.5*(x0 + x1)
-                y0 = self.points[0].y()
-                y1 = self.points[1].y()
-                yc = 0.5 * (y0 + y1)
-                dx = x1-x0
-                dy = y1-y0
+            if (self.shapes_points_count == len(self.points)):
+                if self.shapes_points_count == 2:
+                    x0 = self.points[0].x()
+                    x1 = self.points[1].x()
+                    xc = 0.5 * (x0 + x1)
+                    y0 = self.points[0].y()
+                    y1 = self.points[1].y()
+                    yc = 0.5 * (y0 + y1)
+                    dx = x1 - x0
+                    dy = y1 - y0
+                    diameter = np.sqrt(dx * dx + dy * dy)
+                    r = diameter * 0.5
 
-                # if dy == 0.:
-                alpha_sign = 1.
-                # else:
-                #     alpha_sign = dy / np.abs(dy)
+                    line_path = QPainterPath()
+                    vrtx_path = QPainterPath()
+                    line_path.moveTo(self.points[0])
 
-                if dx == 0.:
-                    alpha_rad = np.pi/2.
-                    alpha = alpha_sign*90.
-                else:
-                    tg_alpha = dy/dx
-                    alpha_rad = np.arctan(tg_alpha)
-                    alpha = alpha_sign*(alpha_rad/np.pi)*180.
-                x_diameter = np.sqrt(dx*dx + dy*dy)
-                a = x_diameter*0.5
+                    for i, p in enumerate(self.points):
+                        line_path.lineTo(p)
+                        self.drawVertex(vrtx_path, i)
+                    if self.isClosed():
+                        line_path.lineTo(self.points[0])
+                    self._painter.drawPath(line_path)
+                    self._painter.drawPath(vrtx_path)
+                    self._painter.fillPath(vrtx_path, self.vertex_fill_color)
 
-                x2_centered = self.points[2].x() - xc
-                y2_centered = self.points[2].y() - yc
-                coords2_centered = np.asarray([[x2_centered],[y2_centered]])
-                rotation_matrix = np.asarray([[np.cos(alpha_rad), np.sin(alpha_rad)],[-np.sin(alpha_rad), np.cos(alpha_rad)]])
-                coords2_centered_rotated_inv = rotation_matrix.dot(coords2_centered)
-                x2r = coords2_centered_rotated_inv[0]
-                y2r = coords2_centered_rotated_inv[1]
-                if a==0.:
-                    b = np.abs(y2r)
-                else:
-                    if 4*(a*a) - 4*(x2r*x2r) - y2r*y2r <= 0.:
+                    square = QRectF(QPointF(-r, -r), QPointF(r, r))
+                    self._painter.translate(xc, yc)
+                    self._painter.drawEllipse(square)
+                elif self.shapes_points_count == 3:
+                    x0 = self.points[0].x()
+                    x1 = self.points[1].x()
+                    xc = 0.5 * (x0 + x1)
+                    y0 = self.points[0].y()
+                    y1 = self.points[1].y()
+                    yc = 0.5 * (y0 + y1)
+                    dx = x1 - x0
+                    dy = y1 - y0
+
+                    alpha_sign = 1.
+
+                    if dx == 0.:
+                        alpha_rad = np.pi / 2.
+                        alpha = alpha_sign * 90.
+                    else:
+                        tg_alpha = dy / dx
+                        alpha_rad = np.arctan(tg_alpha)
+                        alpha = alpha_sign * (alpha_rad / np.pi) * 180.
+                    x_diameter = np.sqrt(dx * dx + dy * dy)
+                    a = x_diameter * 0.5
+
+                    x2_centered = self.points[2].x() - xc
+                    y2_centered = self.points[2].y() - yc
+                    coords2_centered = np.asarray([[x2_centered], [y2_centered]])
+                    rotation_matrix = np.asarray(
+                        [[np.cos(alpha_rad), np.sin(alpha_rad)], [-np.sin(alpha_rad), np.cos(alpha_rad)]])
+                    coords2_centered_rotated_inv = rotation_matrix.dot(coords2_centered)
+                    x2r = coords2_centered_rotated_inv[0]
+                    y2r = coords2_centered_rotated_inv[1]
+                    if a == 0.:
                         b = np.abs(y2r)
                     else:
-                        b = np.abs(y2r)/np.sqrt(1. - (x2r*x2r)/(a*a))
+                        if 4 * (a * a) - 4 * (x2r * x2r) - y2r * y2r <= 0.:
+                            b = np.abs(y2r)
+                        else:
+                            b = np.abs(y2r) / np.sqrt(1. - (x2r * x2r) / (a * a))
 
+                    line_path = QPainterPath()
+                    vrtx_path = QPainterPath()
+                    line_path.moveTo(self.points[0])
 
+                    for i, p in enumerate(self.points):
+                        line_path.lineTo(p)
+                        self.drawVertex(vrtx_path, i)
+                    if self.isClosed():
+                        line_path.lineTo(self.points[0])
+                    self._painter.drawPath(line_path)
+                    self._painter.drawPath(vrtx_path)
+                    self._painter.fillPath(vrtx_path, self.vertex_fill_color)
 
-                line_path = QPainterPath()
-                vrtx_path = QPainterPath()
-                line_path.moveTo(self.points[0])
-
-                for i, p in enumerate(self.points):
-                    line_path.lineTo(p)
-                    self.drawVertex(vrtx_path, i)
-                if self.isClosed():
-                    line_path.lineTo(self.points[0])
-                self._painter.drawPath(line_path)
-                self._painter.drawPath(vrtx_path)
-                self._painter.fillPath(vrtx_path, self.vertex_fill_color)
-
-                rect = QRectF(QPointF(-a, -b), QPointF(a, b))
-                self._painter.translate(xc, yc)
-                self._painter.rotate(alpha)
-                self._painter.drawEllipse(rect)
-
+                    rect = QRectF(QPointF(-a, -b), QPointF(a, b))
+                    self._painter.translate(xc, yc)
+                    self._painter.rotate(alpha)
+                    self._painter.drawEllipse(rect)
 
             self._painter.end()
-
-
-
 
 
     def drawVertex(self, path, i):
@@ -239,8 +257,23 @@ class Shape(object):
                 return i
         return None
 
+
     def containsPoint(self, point):
-        return self.makePath().contains(point)
+        if self.shape_type == shape_types.ellipse:
+            return self.makePath().contains(point)
+        elif self.shape_type == shape_types.circle:
+            x0 = self.points[0].x()
+            x1 = self.points[1].x()
+            xc = 0.5 * (x0 + x1)
+            y0 = self.points[0].y()
+            y1 = self.points[1].y()
+            yc = 0.5 * (y0 + y1)
+            dx = x1 - x0
+            dy = y1 - y0
+            diameter = np.sqrt(dx * dx + dy * dy)
+            r = diameter * 0.5
+
+            return ((point.x() - xc)**2 + (point.y() - yc)**2) <= r**2
 
     def makePath(self):
         path = QPainterPath(self.points[0])

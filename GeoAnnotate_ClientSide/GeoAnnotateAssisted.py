@@ -73,7 +73,6 @@ class MainWindow(QMainWindow, WindowMixin):
         # Load setting in the main thread
         self.settings = Settings(os.path.dirname(os.path.abspath(__file__)))
         self.settings.load()
-        settings = self.settings
 
         # self.defaultSaveDir = defaultSaveDir
 
@@ -90,6 +89,18 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self._noSelectionSlot = False
         self._beginner = True
+
+        self.label_types = args.labels_type
+        self.shapes_points_count = 3
+        if self.label_types == 'MCS':
+            self.shapes_points_count = 3
+            self.label_class = MCSlabel
+        elif self.label_types == 'MC':
+            self.shapes_points_count = 2
+            self.label_class = MClabel
+        elif self.label_types == 'PL':
+            self.shapes_points_count = 2
+            self.label_class = MClabel
 
         # Load predefined classes to the list
         self.loadPredefinedClasses(defaultPrefdefClassFile)
@@ -124,11 +135,9 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Add some of widgets to listLayout
         listLayout.addWidget(self.editButton)
-        # listLayout.addWidget(self.diffcButton)
         listLayout.addWidget(useDefaultLabelContainer)
 
         #region Create and add a widget for showing current label items
-        # self.labelList = QListWidget()
         self.labelList = QTreeWidget()
         self.labelList.setColumnCount(3)
         self.labelList.setHeaderLabels(['name', 'uid', 'date,time'])
@@ -150,7 +159,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
         #region MK - track list widget
-        # self.trackListWidget = QListWidget()
         self.trackListWidget = QTreeWidget()
         self.trackListWidget.setColumnCount(2)
         self.trackListWidget.setHeaderLabels(['name', 'uid', 'date,time'])
@@ -179,7 +187,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self.filedock = QDockWidget(u'File List', self)
         self.filedock.setObjectName(u'Files')
         self.filedock.setWidget(fileListContainer)
-        # self.filedock.setFeatures(QDockWidget.DockWidgetFloatable)
         #endregion
         self.addDockWidget(Qt.RightDockWidgetArea, self.filedock)
 
@@ -202,7 +209,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.scrollRequest.connect(self.scrollRequestCallback)
 
         self.canvas.newShape.connect(self.newShapeCallback)
-        # self.canvas.shapeMoved.connect(self.ShapeModifiedCallback)
         self.canvas.shapeMoved.connect(self.setDirty)
         self.canvas.shapeMovesFinished.connect(self.ShapeModifiedCallback)
         self.canvas.selectionChanged.connect(self.shapeSelectionChanged)
@@ -221,26 +227,14 @@ class MainWindow(QMainWindow, WindowMixin):
         opendir = action('&Open Dir', self.openDirDialog,
                          'Ctrl+u', 'open', u'Open Dir')
 
-        # changeSavedir = action('&Change Save Dir', self.changeSavedirDialog,
-        #                        'Ctrl+r', 'open', u'Change default saved Annotation dir')
-
-        # openAnnotation = action('&Open Annotation', self.openAnnotationDialog,
-        #                         'Ctrl+Shift+O', 'open', u'Open Annotation')
-
         openNextImg = action('Next file', self.openNextImg,
                              'd', 'next', u'Open Next')
 
         openPrevImg = action('&Prev Image', self.openPrevImg,
                              'a', 'prev', u'Open Prev')
 
-        # verify = action('&Verify Image', self.verifyImg,
-        #                 'space', 'verify', u'Verify Image')
-
         save = action('&Save', self.saveFile,
                       'Ctrl+S', 'save', u'Save labels to file', enabled=False)
-
-        # saveAs = action('&Save As', self.saveFileAs,
-        #                 'Ctrl+Shift+S', 'save-as', u'Save labels to a different file', enabled=False)
 
         close = action('&Close', self.closeFile, 'Ctrl+W', 'close', u'Close current file')
 
@@ -249,29 +243,22 @@ class MainWindow(QMainWindow, WindowMixin):
         color1 = action('Box Line Color', self.chooseColor1,
                         'Ctrl+L', 'color_line', u'Choose Box line color')
 
-        createMode = action('Create ellipse', self.setCreateMode,
-                            'w', 'new', u'Start drawing Boxs', enabled=False)
+        createMode = action('Create new label', self.setCreateMode,
+                            'w', 'new', u'Start drawing a new label', enabled=False)
         editMode = action('&Edit ellipse', self.setEditMode,
                           'Ctrl+J', 'edit', u'Move and edit Boxs', enabled=False)
 
-        create = action('Create ellipse', self.createShape,
-                        'w', 'new', u'Draw a new Box', enabled=False)
+        create = action('Create a label', self.createShape,
+                        'w', 'new', u'Draw a new label', enabled=False)
 
-        delete = action('Delete ellipse', self.deleteSelectedShape,
+        delete = action('Delete label', self.deleteSelectedShape,
                         'Delete', 'delete', u'Delete', enabled=False)
-        # copy = action('&Duplicate ellipse', self.copySelectedShape,
-        #               'Ctrl+D', 'copy', u'Create a duplicate of the selected Box',
-        #               enabled=False)
 
         start_track = action('Start &new track', self.startNewTrack, 'Ctrl+N',
                              'new track', u'Creating new track starting from this label')
 
         continue_track = action('Continue a track', self.continueExistingTrack, None,
                              'continue track', u'Continue an existing track...')
-
-        # advancedMode = action('&Advanced Mode', self.toggleAdvancedMode,
-        #                       'Ctrl+Shift+A', 'expert', u'Switch to advanced mode',
-        #                       checkable=True)
 
         hideAll = action('&Hide ellipse', partial(self.togglePolygons, False),
                          'Ctrl+H', 'hide', u'Hide all Boxs',
@@ -371,19 +358,19 @@ class MainWindow(QMainWindow, WindowMixin):
         # Auto preserving basemap config
         self.preserveBasemapConfig = QAction("Preserve basemap configuration", self)
         self.preserveBasemapConfig.setCheckable(True)
-        self.preserveBasemapConfig.setChecked(settings.get(SETTING_PRESERVE_BASEMAP_CONFIG, True))
+        self.preserveBasemapConfig.setChecked(self.settings.get(SETTING_PRESERVE_BASEMAP_CONFIG, True))
 
         # Sync single class mode from PR#106
         self.singleClassMode = QAction("Single Class Mode", self)
         self.singleClassMode.setShortcut("Ctrl+Shift+S")
         self.singleClassMode.setCheckable(True)
-        self.singleClassMode.setChecked(settings.get(SETTING_SINGLE_CLASS, False))
+        self.singleClassMode.setChecked(self.settings.get(SETTING_SINGLE_CLASS, False))
         self.lastLabel = None
         # Add option to enable/disable labels being painted at the top of bounding boxes
         self.paintLabelsOption = QAction("Paint Labels", self)
         self.paintLabelsOption.setShortcut("Ctrl+Shift+P")
         self.paintLabelsOption.setCheckable(True)
-        self.paintLabelsOption.setChecked(settings.get(SETTING_PAINT_LABEL, False))
+        self.paintLabelsOption.setChecked(self.settings.get(SETTING_PAINT_LABEL, False))
         self.paintLabelsOption.triggered.connect(self.togglePaintLabelsOption)
 
         addActions(self.menus.file,
@@ -405,16 +392,9 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Custom context menu for the canvas widget:
         addActions(self.canvas.menus[0], self.actions.beginnerContext)
-        # addActions(self.canvas.menus[1], (
-        #     action('&Copy here', self.copyShape),
-        #     action('&Move here', self.moveShape)))
         addActions(self.canvas.menus[1], [action('&Move here', self.moveShape)])
 
         self.tools = self.toolbar('Tools')
-        # self.actions.beginner = (
-        #     open, opendir, changeSavedir, openNextImg, openPrevImg, save, None, create, copy,
-        #     delete, None,
-        #     zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
         self.actions.beginner = (
             open, opendir, openNextImg, openPrevImg, save, None, create,
             delete, None,
@@ -443,44 +423,40 @@ class MainWindow(QMainWindow, WindowMixin):
         self.difficult = False
 
         ## Fix the compatible issue for qt4 and qt5. Convert the QStringList to python list
-        if settings.get(SETTING_RECENT_FILES):
+        if self.settings.get(SETTING_RECENT_FILES):
             if have_qstring():
-                recentFileQStringList = settings.get(SETTING_RECENT_FILES)
+                recentFileQStringList = self.settings.get(SETTING_RECENT_FILES)
                 self.recentFiles = [ustr(i) for i in recentFileQStringList]
             else:
-                self.recentFiles = recentFileQStringList = settings.get(SETTING_RECENT_FILES)
+                self.recentFiles = recentFileQStringList = self.settings.get(SETTING_RECENT_FILES)
 
-        size = settings.get(SETTING_WIN_SIZE, QSize(600, 500))
-        position = settings.get(SETTING_WIN_POSE, QPoint(0, 0))
+        size = self.settings.get(SETTING_WIN_SIZE, QSize(600, 500))
+        position = self.settings.get(SETTING_WIN_POSE, QPoint(0, 0))
         self.resize(size)
         self.move(position)
-        saveDir = ustr(settings.get(SETTING_SAVE_DIR, None))
-        self.lastOpenDir = ustr(settings.get(SETTING_LAST_OPEN_DIR, None))
-        # if self.defaultSaveDir is None and saveDir is not None and os.path.exists(saveDir):
-        #     self.defaultSaveDir = saveDir
-        #     self.statusBar().showMessage('%s started. Annotation will be saved to %s' %
-        #                                  (__appname__, self.defaultSaveDir))
-        #     self.statusBar().show()
-
+        saveDir = ustr(self.settings.get(SETTING_SAVE_DIR, None))
+        self.lastOpenDir = ustr(self.settings.get(SETTING_LAST_OPEN_DIR, None))
 
         #region tracks database
+        self.queries_collection = SQLite_Queries(label_types=self.label_types)
+
         try:
-            # self.tracks_db_fname = self.settings.get(SETTING_TRACKS_DATABASE_FNAME, os.path.join(self.defaultSaveDir, 'tracks.db'))
-            self.tracks_db_fname = './tracks.db'
+            self.tracks_db_fname = self.settings.get(SETTING_TRACKS_DATABASE_FNAME, os.path.join('./', 'tracks.db'))
+            # self.tracks_db_fname = './tracks.db'
             self.settings[SETTING_TRACKS_DATABASE_FNAME] = self.tracks_db_fname
         except:
             self.tracks_db_fname = os.path.join(os.getcwd(), 'tracks.db')
             self.settings[SETTING_TRACKS_DATABASE_FNAME] = self.tracks_db_fname
 
         if (os.path.exists(self.tracks_db_fname) and os.path.isfile(self.tracks_db_fname)):
-            if DatabaseOps.test_db_connection(self.tracks_db_fname):
+            if DatabaseOps.test_db_connection(self.tracks_db_fname, self.queries_collection):
                 print('tracks database connection successful')
                 self.tracking_available = True
             else:
                 print('WARNING! tracks database connection failed')
                 self.tracking_available = False
         else:
-            if DatabaseOps.create_tracks_db(self.tracks_db_fname):
+            if DatabaseOps.create_tracks_db(self.tracks_db_fname, self.queries_collection):
                 print('created new tracks database file: %s' % self.tracks_db_fname)
                 self.tracking_available = True
             else:
@@ -488,9 +464,9 @@ class MainWindow(QMainWindow, WindowMixin):
         #endregion
 
 
-        self.restoreState(settings.get(SETTING_WIN_STATE, QByteArray()))
-        Shape.line_color = self.lineColor = QColor(settings.get(SETTING_LINE_COLOR, DEFAULT_LINE_COLOR))
-        Shape.fill_color = self.fillColor = QColor(settings.get(SETTING_FILL_COLOR, DEFAULT_FILL_COLOR))
+        self.restoreState(self.settings.get(SETTING_WIN_STATE, QByteArray()))
+        Shape.line_color = self.lineColor = QColor(self.settings.get(SETTING_LINE_COLOR, DEFAULT_LINE_COLOR))
+        Shape.fill_color = self.fillColor = QColor(self.settings.get(SETTING_FILL_COLOR, DEFAULT_FILL_COLOR))
         self.canvas.setDrawingColor(self.lineColor)
         # Add chris
         Shape.difficult = self.difficult
@@ -499,10 +475,6 @@ class MainWindow(QMainWindow, WindowMixin):
             if isinstance(x, QVariant):
                 return x.toBool()
             return bool(x)
-
-        # if xbool(settings.get(SETTING_ADVANCE_MODE, False)):
-        #     self.actions.advancedMode.setChecked(True)
-        #     self.toggleAdvancedMode()
 
         # Populate the File menu dynamically.
         self.updateFileMenu()
@@ -531,18 +503,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def noShapes(self):
         return not self.itemsToShapes
-
-    # def toggleAdvancedMode(self, value=True):
-    #     self._beginner = not value
-    #     self.canvas.setEditing(True)
-    #     self.populateModeActions()
-    #     self.editButton.setVisible(not value)
-    #     if value:
-    #         self.actions.createMode.setEnabled(True)
-    #         self.actions.editMode.setEnabled(False)
-    #         # self.dock.setFeatures(self.dock.features() | self.dockFeatures)
-    #     # else:
-    #     #     self.dock.setFeatures(self.dock.features() ^ self.dockFeatures)
 
     def populateModeActions(self):
         if self.beginner():
@@ -632,7 +592,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def startNewTrack(self):
         if self.canvas.selectedShape:
-            curr_label_track_data = DatabaseOps.read_tracks_by_label_uids(self.tracks_db_fname, [self.canvas.selectedShape.label.uid])
+            curr_label_track_data = DatabaseOps.read_tracks_by_label_uids(self.tracks_db_fname, self.queries_collection, [self.canvas.selectedShape.label.uid])
             if len(curr_label_track_data) > 0:
                 # there is a track which this label belongs to
                 DisplayWarning("SORRY, we cannot do this.",
@@ -640,7 +600,7 @@ class MainWindow(QMainWindow, WindowMixin):
                                "label UID: %s\nTrack UID: %s" % (self.canvas.selectedShape.label.uid, curr_label_track_data[0][0]))
                 return
             else:
-                curr_track = Track()
+                curr_track = Track(args)
                 self.addTrack(curr_track)
                 curr_track.append_new_label(self.canvas.selectedShape)
                 label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
@@ -677,7 +637,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def continueExistingTrack(self):
         if self.canvas.selectedShape:
-            curr_label_track_data = DatabaseOps.read_tracks_by_label_uids(self.tracks_db_fname, [self.canvas.selectedShape.label.uid])
+            curr_label_track_data = DatabaseOps.read_tracks_by_label_uids(self.tracks_db_fname, self.queries_collection, [self.canvas.selectedShape.label.uid])
             if len(curr_label_track_data) > 0:
                 # there is a track which this label belongs to
                 DisplayWarning("SORRY, we cannot do this.",
@@ -791,10 +751,6 @@ class MainWindow(QMainWindow, WindowMixin):
             pass
         # Checked and Update
         try:
-            # if difficult != shape.difficult:
-            #     shape.difficult = difficult
-            #     self.setDirty()
-            # else:  # User probably changed item visibility
             self.canvas.setShapeVisible(shape, item.checkState() == Qt.Checked)
         except:
             pass
@@ -866,18 +822,18 @@ class MainWindow(QMainWindow, WindowMixin):
         return
 
 
-    def loadPredictedLabels(self, srvMCSlabels):
+    def loadPredictedLabels(self, srvLabels):
         s = []
 
-        if len(srvMCSlabels) == 0:
+        if len(srvLabels) == 0:
             return
 
         # for label, points, latlonPoints, line_color, fill_color, isEllipse in shapes:
-        for label_class,labels_of_class  in srvMCSlabels.items():
+        for label_class,labels_of_class  in srvLabels.items():
             if labels_of_class is None:
                 continue
             for label in labels_of_class:
-                mcs = MCSlabel.MCSLabelFrom_srvMCSlabel(label)
+                mcs = self.label_class.LabelFrom_srvLabel(label)
                 shape = Shape(label=mcs, parent_canvas=self.canvas)
 
                 for (pt_name, pt_latlon) in sorted(mcs.pts.items(), key=lambda x: x[0]):
@@ -893,21 +849,22 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def loadTracks(self):
-        tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt)
+        tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt, self.queries_collection)
         if tracks_from_db and len(tracks_from_db) > 0:
-            tracks_df = pd.DataFrame(np.array(tracks_from_db), columns=['track_uid', 'track_human_readable_name',
-                                                                        'label_id', 'label_uid', 'label_dt', 'label_name',
-                                                                        'lon0', 'lat0', 'lon1', 'lat1', 'lon2', 'lat2', 'sourcedata_fname'])
+            columns = ['track_uid', 'track_human_readable_name', 'label_id', 'label_uid', 'label_dt', 'label_name']
+            for i in range(self.shapes_points_count):
+                columns = columns + ['lon%d'%i, 'lat%d'%i]
+            columns = columns + ['sourcedata_fname']
+            tracks_df = pd.DataFrame(np.array(tracks_from_db), columns=columns)
             tracks_df['label_dt'] = pd.to_datetime(tracks_df['label_dt'])
             track_uids = tracks_df['track_uid'].unique()
             for track_uid in track_uids:
                 if track_uid not in self.tracks.keys():
                     track_human_readable_name = np.array(tracks_df[tracks_df['track_uid'] == track_uid]['track_human_readable_name'])[0]
-                    curr_track = Track({'uid': track_uid, 'human_readable_name': track_human_readable_name})
+                    curr_track = Track(args, {'uid': track_uid, 'human_readable_name': track_human_readable_name})
                     track_labels = tracks_df[tracks_df['track_uid'] == track_uid]
                     for idx, track_label_row in track_labels.iterrows():
-                        # curr_track.append_new_label({'uid': track_label_row['label_uid'], 'dt': track_label_row['label_dt']})
-                        curr_track.append_new_label(MCSlabel.from_db_row_dict(track_label_row.to_dict()))
+                        curr_track.append_new_label(self.label_class.from_db_row_dict(track_label_row.to_dict()))
 
                     track_item = HashableQTreeWidgetItem([curr_track.human_readable_name, curr_track.uid, ''])
                     track_item.setFlags(track_item.flags() | Qt.ItemIsUserCheckable)
@@ -932,7 +889,7 @@ class MainWindow(QMainWindow, WindowMixin):
         try:
             for shape in self.canvas.shapes:
                 curr_label = shape.label
-                if DatabaseOps.insert_label_data(self.tracks_db_fname, curr_label):
+                if DatabaseOps.insert_label_data(self.tracks_db_fname, curr_label, self.queries_collection):
                     self.setClean()
                 else:
                     DisplayWarning('OOPS', 'Something went wrong!', 'Some of labels were not written to the database.\nPlease refer to the "errors.log" file and make the developer know about the error.')
@@ -969,7 +926,7 @@ class MainWindow(QMainWindow, WindowMixin):
             shape.label.name = shape_name
             shape.line_color = generateColorByText(shape.label.name)
             self.setDirty()
-            res = DatabaseOps.update_label(self.tracks_db_fname, shape.label)
+            res = DatabaseOps.update_label(self.tracks_db_fname, shape.label, self.queries_collection)
             if res:
                 self.setClean()
             else:
@@ -989,13 +946,19 @@ class MainWindow(QMainWindow, WindowMixin):
                 #     if track_item != curr_item:
                 #         track_item.setCheckState(0, Qt.Unchecked)
                 curr_track = self.TrackItemsToTracks[curr_item]
-                track_labels_data = DatabaseOps.read_track_labels_by_track_uid(self.tracks_db_fname, curr_track.uid)
-                track_labels_df = pd.DataFrame(np.array(track_labels_data), columns=['label_id', 'label_uid', 'label_dt', 'label_name', 'lon0', 'lat0', 'lon1', 'lat1', 'lon2', 'lat2', 'sourcedata_fname'])
+                track_labels_data = DatabaseOps.read_track_labels_by_track_uid(self.tracks_db_fname, curr_track.uid, self.queries_collection)
+
+                columns = ['label_id', 'label_uid', 'label_dt', 'label_name']
+                for i in range(self.shapes_points_count):
+                    columns = columns + ['lon%d' % i, 'lat%d' % i]
+                columns = columns + ['sourcedata_fname']
+
+                track_labels_df = pd.DataFrame(np.array(track_labels_data), columns=columns)
                 track_labels_df['label_dt'] = pd.to_datetime(track_labels_df['label_dt'])
                 track_labels_df.sort_values(by = 'label_dt', inplace=True)
                 self.curr_track_shapes = []
                 for idx,label_row in track_labels_df.iterrows():
-                    curr_label = MCSlabel.from_db_row_dict(label_row.to_dict())
+                    curr_label = self.label_class.from_db_row_dict(label_row.to_dict())
                     shape = Shape(label=curr_label, parent_canvas=self.canvas)
                     for (pt_name, pt_latlon) in sorted(curr_label.pts.items(), key=lambda x: x[0]):
                         x_pic, y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
@@ -1059,19 +1022,15 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # MK: set latlon points of the new shape to pts of the label of this shape
         new_shape = self.canvas.shapes[-1]
-        lon0 = new_shape.latlonPoints[0].x()
-        lat0 = new_shape.latlonPoints[0].y()
-        lon1 = new_shape.latlonPoints[1].x()
-        lat1 = new_shape.latlonPoints[1].y()
-        lon2 = new_shape.latlonPoints[2].x()
-        lat2 = new_shape.latlonPoints[2].y()
-        pt0 = {'lat': lat0, 'lon': lon0}
-        pt1 = {'lat': lat1, 'lon': lon1}
-        pt2 = {'lat': lat2, 'lon': lon2}
-        pts = {'pt0': pt0, 'pt1': pt1, 'pt2': pt2}
+        pts = {}
+        for i in range(new_shape.shapes_points_count):
+            lon = new_shape.latlonPoints[i].x()
+            lat = new_shape.latlonPoints[i].y()
+            pt = {'lat': lat, 'lon': lon}
+            pts['pt%d'%i] = pt
         new_shape.label.pts = pts
         new_shape.label.sourcedata_fname = os.path.basename(self.filePath)
-        if DatabaseOps.insert_label_data(self.tracks_db_fname, new_shape.label):
+        if DatabaseOps.insert_label_data(self.tracks_db_fname, new_shape.label, self.queries_collection):
             self.setClean()
         else:
             DisplayWarning('OOPS', 'Something went wrong!',
@@ -1082,20 +1041,16 @@ class MainWindow(QMainWindow, WindowMixin):
     def ShapeModifiedCallback(self):
         self.setDirty()
         selected_shape = self.canvas.selectedShape
-        lon0 = selected_shape.latlonPoints[0].x()
-        lat0 = selected_shape.latlonPoints[0].y()
-        lon1 = selected_shape.latlonPoints[1].x()
-        lat1 = selected_shape.latlonPoints[1].y()
-        lon2 = selected_shape.latlonPoints[2].x()
-        lat2 = selected_shape.latlonPoints[2].y()
-        pt0 = {'lat': lat0, 'lon': lon0}
-        pt1 = {'lat': lat1, 'lon': lon1}
-        pt2 = {'lat': lat2, 'lon': lon2}
-        pts = {'pt0': pt0, 'pt1': pt1, 'pt2': pt2}
+        pts = {}
+        for i in range(selected_shape.shapes_points_count):
+            lon = selected_shape.latlonPoints[i].x()
+            lat = selected_shape.latlonPoints[i].y()
+            pt = {'lat': lat, 'lon': lon}
+            pts['pt%d'%i] = pt
         selected_shape.label.pts = pts
         selected_shape.label.sourcedata_fname = os.path.basename(self.filePath)
         self.setDirty()
-        res = DatabaseOps.update_label(self.tracks_db_fname, selected_shape.label)
+        res = DatabaseOps.update_label(self.tracks_db_fname, selected_shape.label, self.queries_collection)
         if not res:
             print('WARNING! the label was not updated in the database. Please refer to the errors.log file for details.')
         else:
@@ -1262,19 +1217,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.image = image
         self.canvas.loadPixmap(QPixmap.fromImage(image))
         self.setClean()
-        # if self.defaultSaveDir is not None:
-        #     basename = os.path.basename(
-        #         os.path.splitext(self.filePath)[0])
-        #     MCCXMLPath = os.path.join(self.defaultSaveDir, basename + MCC_XML_EXT)
-        #
-        #     if os.path.isfile(MCCXMLPath):
-        #         self.loadArbitraryXMLByFilename(MCCXMLPath)
-        # else:
-        #     MCCXMLPath = os.path.splitext(self.basemaphelper.dataSourceFile)[0] + MCC_XML_EXT
-        #     if os.path.isfile(MCCXMLPath):
-        #         self.loadArbitraryXMLByFilename(MCCXMLPath)
 
-        labels_from_database = MCSlabel.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
+        if self.label_types == 'MCS':
+            labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
+        elif ((self.label_types == 'MC') | (self.label_types == 'PL')):
+            labels_from_database = MClabel.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
         self.loadLabels(labels_from_database)
 
 
@@ -1289,18 +1236,14 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def loadFile(self, filePath=None):
-        """Load the specified file, or the last opened file if None."""
         self.resetState()
         self.canvas.setEnabled(False)
         if filePath is None:
             filePath = self.settings.get(SETTING_FILENAME)
 
-        # Make sure that filePath is a regular python string, rather than QString
         filePath = ustr(filePath)
 
         unicodeFilePath = ustr(filePath)
-        # Tzutalin 20160906 : Add file list and dock to move faster
-        # Highlight the file item
         if unicodeFilePath and self.fileListWidget.count() > 0:
             index = self.mImgList.index(unicodeFilePath)
             fileWidgetItem = self.fileListWidget.item(index)
@@ -1351,12 +1294,13 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.zoomHires.setEnabled(True)
             self.actions.switchDataChannel.setEnabled(True)
 
-            labels_from_database = MCSlabel.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
+            labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
             self.loadLabels(labels_from_database)
 
-            labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
-            if labels_cnn_predicted is not None:
-                self.loadPredictedLabels(labels_cnn_predicted)
+            if self.settings.get(SETTING_DETECTION_USE_NEURAL_ASSISTANCE):
+                labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
+                if labels_cnn_predicted is not None:
+                    self.loadPredictedLabels(labels_cnn_predicted)
 
             self.setWindowTitle(__appname__ + ' ' + filePath)
 
@@ -1408,7 +1352,6 @@ class MainWindow(QMainWindow, WindowMixin):
         if not self.mayContinue():
             event.ignore()
         settings = self.settings
-        # If it loads images from dir, don't load it at the begining
         if self.dirname is None:
             settings[SETTING_FILENAME] = self.filePath if self.filePath else ''
         else:
@@ -1421,22 +1364,16 @@ class MainWindow(QMainWindow, WindowMixin):
         settings[SETTING_FILL_COLOR] = self.fillColor
         settings[SETTING_RECENT_FILES] = self.recentFiles
         settings[SETTING_ADVANCE_MODE] = not self._beginner
-        # if self.defaultSaveDir and os.path.exists(self.defaultSaveDir):
-        #     settings[SETTING_SAVE_DIR] = ustr(self.defaultSaveDir)
-        # else:
-        #     settings[SETTING_SAVE_DIR] = ""
 
         if self.lastOpenDir and os.path.exists(self.lastOpenDir):
             settings[SETTING_LAST_OPEN_DIR] = self.lastOpenDir
         else:
             settings[SETTING_LAST_OPEN_DIR] = ""
 
-        # settings[SETTING_AUTO_SAVE] = self.autoSaving.isChecked()
         settings[SETTING_SINGLE_CLASS] = self.singleClassMode.isChecked()
         settings[SETTING_PAINT_LABEL] = self.paintLabelsOption.isChecked()
         settings[SETTING_PRESERVE_BASEMAP_CONFIG] = self.preserveBasemapConfig.isChecked()
         settings.save()
-
     ## User Dialogs ##
 
 
@@ -1470,15 +1407,6 @@ class MainWindow(QMainWindow, WindowMixin):
             self.fileListWidget.addItem(item)
 
     def openPrevImg(self, _value=False):
-        # Proceding prev image without dialog if having any label
-        # if self.autoSaving.isChecked():
-        #     if self.defaultSaveDir is not None:
-        #         if self.dirty is True:
-        #             self.saveFile()
-        #     else:
-        #         self.changeSavedirDialog()
-        #         return
-
         if not self.mayContinue():
             return
 
@@ -1496,15 +1424,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def openNextImg(self, _value=False):
-        # Proceding prev image without dialog if having any label
-        # if self.autoSaving.isChecked():
-        #     if self.defaultSaveDir is not None:
-        #         if self.dirty is True:
-        #             self.saveFile()
-        #     else:
-        #         self.changeSavedirDialog()
-        #         return
-
         if not self.mayContinue():
             return
 
@@ -1536,10 +1455,7 @@ class MainWindow(QMainWindow, WindowMixin):
         if not self.mayContinue():
             return
         path = os.path.dirname(ustr(self.filePath)) if self.filePath else '.'
-        # formats = ['*.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
         formats = ['*.nc']
-        # filters = "Image & Label files (%s)" % ' '.join(formats + ['*%s' % LabelFile.suffix])
-        # filters = "NetCDF files & Label files (%s)" % ' '.join(formats + ['*%s' % LabelFile.suffix])
         filters = "NetCDF files %s" % ' '.join(formats)
         filename = QFileDialog.getOpenFileName(self, '%s - Choose Image or Label file' % __appname__, path, filters)
         if filename:
@@ -1563,8 +1479,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self.setClean()
         self.toggleActions(False)
         self.canvas.setEnabled(False)
-        # self.actions.saveAs.setEnabled(False)
-
 
     def resetAll(self):
         self.settings.reset()
@@ -1607,7 +1521,7 @@ class MainWindow(QMainWindow, WindowMixin):
         shape_to_delete = self.canvas.deleteSelected()
         self.remLabel(shape_to_delete)
         self.setDirty()
-        res = DatabaseOps.remove_label(self.tracks_db_fname, shape_to_delete.label.uid)
+        res = DatabaseOps.remove_label(self.tracks_db_fname, shape_to_delete.label.uid, self.queries_collection)
         if not res:
             print('WARNING! the label was not removed from database. Please refer to the errors.log file for details.')
         else:
@@ -1640,14 +1554,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.setDirty()
 
 
-    # def copyShape(self):
-    #     self.canvas.endMove(copy=True)
-    #     self.addLabel(self.canvas.selectedShape)
-    #     self.setDirty()
-
-
     def moveShape(self):
-        # self.canvas.endMove(copy=False)
         self.canvas.endMove()
         self.setDirty()
 
@@ -1682,7 +1589,6 @@ def read(filename, default=None):
                 helper = default
                 helper.SwitchSourceData(filename)
 
-            # helper.PlotDataLayer()
             helper.FuseBasemapWithData()
             return helper
         else:
@@ -1693,23 +1599,9 @@ def read(filename, default=None):
 
 
 def get_main_app(argv=[]):
-    """
-    Standard boilerplate Qt application code.
-    Do everything but app.exec_() -- so that we can test the application in one thread
-    """
     app = QApplication(argv)
     app.setApplicationName(__appname__)
     app.setWindowIcon(newIcon("app"))
-    # Tzutalin 201705+: Accept extra agruments to change predefined class file
-    # Usage : labelImg.py image predefClassFile saveDir
-    # win = MainWindow(argv[1] if len(argv) >= 2 else None,
-    #                  argv[2] if len(argv) >= 3 else os.path.join(
-    #                      os.path.dirname(sys.argv[0]),
-    #                      'data', 'predefined_classes.txt'),
-    #                  argv[3] if len(argv) >= 4 else None)
-
-    # win = MainWindow(argv[1] if len(argv) >= 2 else None,
-    #                  argv[2] if len(argv) >= 3 else os.path.join(os.path.dirname(sys.argv[0]), 'data', 'predefined_classes.txt'))
     win = MainWindow(None, os.path.join(os.path.dirname(sys.argv[0]), 'data', 'predefined_classes.txt'))
 
     win.show()

@@ -1,10 +1,3 @@
-# import matplotlib
-# # matplotlib.use('Qt5Agg')
-# # matplotlib.use('TkAgg')
-# matplotlib.use('ps')
-
-# from matplotlib import pyplot as plt
-# from mpl_toolkits.basemap import Basemap
 import json
 import logging
 import sys
@@ -27,10 +20,11 @@ import ast
 
 
 
+### TODO: remove if not needed
 # basemaps_pickled_list_csvfile = './cache/basemaps_pickled_list.csv'
 
-C1 = 1.19104e-5 # mWm−2 sr−1 (cm−1)4
-C2 = 1.43877 # K (cm−1)−1
+# C1 = 1.19104e-5 # mWm−2 sr−1 (cm−1)4
+# C2 = 1.43877 # K (cm−1)−1
 
 '''
 from Jean-Claude Thelen and John M. Edwards, "Short-wave radiances: comparison between SEVIRI and the Unified Model"
@@ -66,32 +60,32 @@ Channel | Band     | λcen   | λmin  | λmax  |
 12      | HRV      | —     | 0.40  | 1.10  |
 
 '''
-A_values = {'ch4': 0.9915,
-            'ch5': 0.9960,
-            'ch6': 0.9991,
-            'ch7': 0.9996,
-            'ch8': 0.9999,
-            'ch9': 0.9983,
-            'ch10':0.9988,
-            'ch11':0.9982}
-
-B_values = {'ch4': 2.9002,
-            'ch5': 2.0337,
-            'ch6': 0.4340,
-            'ch7': 0.1714,
-            'ch8': 0.0527,
-            'ch9': 0.6084,
-            'ch10':0.3882,
-            'ch11':0.5390}
-
-nu_central = {'ch4': 2547.771 ,
-             'ch5':  1595.621 ,
-             'ch6':  1360.377 ,
-             'ch7':  1148.130 ,
-             'ch8':  1034.715 ,
-             'ch9':  929.842 ,
-             'ch10': 838.659 ,
-             'ch11': 750.653 }
+# A_values = {'ch4': 0.9915,
+#             'ch5': 0.9960,
+#             'ch6': 0.9991,
+#             'ch7': 0.9996,
+#             'ch8': 0.9999,
+#             'ch9': 0.9983,
+#             'ch10':0.9988,
+#             'ch11':0.9982}
+#
+# B_values = {'ch4': 2.9002,
+#             'ch5': 2.0337,
+#             'ch6': 0.4340,
+#             'ch7': 0.1714,
+#             'ch8': 0.0527,
+#             'ch9': 0.6084,
+#             'ch10':0.3882,
+#             'ch11':0.5390}
+#
+# nu_central = {'ch4': 2547.771 ,
+#              'ch5':  1595.621 ,
+#              'ch6':  1360.377 ,
+#              'ch7':  1148.130 ,
+#              'ch8':  1034.715 ,
+#              'ch9':  929.842 ,
+#              'ch10': 838.659 ,
+#              'ch11': 750.653 }
 
 
 class TrackingBasemapHelperClass(object):
@@ -121,56 +115,26 @@ class TrackingBasemapHelperClass(object):
                                      'lon': 'longitudes'}
         self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
 
-    @classmethod
-    def t_brightness_calculate(self, data, channelname = 'ch9'):
-        if channelname == 'ch5_ch9':
-            ch5_temp = TrackingBasemapHelperClass.t_brightness_calculate(data['ch5'], 'ch5')
-            ch9_temp = TrackingBasemapHelperClass.t_brightness_calculate(data['ch9'], 'ch9')
-            return ch5_temp-ch9_temp
-        else:
-            data.mask[data == data.min()] = True
-            A = A_values[channelname]
-            B = B_values[channelname]
-            nu = nu_central[channelname]
-            c = C2 * nu
-            e = nu * nu * nu * C1
-            logval = np.log(1. + e / data)
-            bt = (c / logval - B) / A
-            return bt
-        return 0
 
-    #
-    # def ReadSourceData(self, calculateLatLonLimits = True):
-    #     ds1 = Dataset(self.dataSourceFile, 'r')
-    #
-    #     self.lats = ds1.variables['lat'][:]
-    #     self.lons = ds1.variables['lon'][:]
-    #
-    #     for dataname in self.channelNames:
-    #         if dataname == 'ch5_ch9':
-    #             ch5_data = ds1.variables['ch5'][:]
-    #             ch5_data.mask = self.lats.mask
-    #             ch9_data = ds1.variables['ch5'][:]
-    #             ch9_data.mask = self.lats.mask
-    #             curr_data = {'ch5': ch5_data, 'ch9': ch9_data}
-    #             self.__dict__['data_%s' % dataname] = TrackingBasemapHelperClass.t_brightness_calculate(curr_data, dataname)
-    #         else:
-    #             curr_data = ds1.variables[dataname][:]
-    #             curr_data.mask = self.lats.mask
-    #             self.__dict__['data_%s' % dataname] = TrackingBasemapHelperClass.t_brightness_calculate(curr_data, dataname)
-    #
-    #
-    #
-    #     ds1.close()
-    #
-    #     while self.lats.min() < 0.0:
-    #         self.lats[self.lats < 0.0] = self.lats[self.lats < 0.0] + 360.
-    #     while self.lons.min() < 0.0:
-    #         self.lons[self.lons < 0.0] = self.lons[self.lons < 0.0] + 360.
-    #
-    #     self.lats_re = np.reshape(self.lats, (-1,))
-    #     self.lons_re = np.reshape(self.lons, (-1,))
-    #
+    ### TODO: remove if no errors
+    # @classmethod
+    # def t_brightness_calculate(self, data, channelname = 'ch9'):
+    #     if channelname == 'ch5_ch9':
+    #         ch5_temp = TrackingBasemapHelperClass.t_brightness_calculate(data['ch5'], 'ch5')
+    #         ch9_temp = TrackingBasemapHelperClass.t_brightness_calculate(data['ch9'], 'ch9')
+    #         return ch5_temp-ch9_temp
+    #     else:
+    #         data.mask[data == data.min()] = True
+    #         A = A_values[channelname]
+    #         B = B_values[channelname]
+    #         nu = nu_central[channelname]
+    #         c = C2 * nu
+    #         e = nu * nu * nu * C1
+    #         logval = np.log(1. + e / data)
+    #         bt = (c / logval - B) / A
+    #         return bt
+    #     return 0
+
 
     def ComputeCenterAndRange(self):
         self.cLat = (self.urcrnrlat + self.llcrnrlat) * 0.5
