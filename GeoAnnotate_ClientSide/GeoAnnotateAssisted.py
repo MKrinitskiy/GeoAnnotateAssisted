@@ -504,6 +504,8 @@ class MainWindow(QMainWindow, WindowMixin):
     def noShapes(self):
         return not self.itemsToShapes
 
+
+
     def populateModeActions(self):
         if self.beginner():
             tool, menu = self.actions.beginner, self.actions.beginnerContext
@@ -518,13 +520,14 @@ class MainWindow(QMainWindow, WindowMixin):
             else (self.actions.createMode, self.actions.editMode)
         addActions(self.menus.edit, actions + self.actions.editMenu)
 
-    def setBeginner(self):
-        self.tools.clear()
-        addActions(self.tools, self.actions.beginner)
 
-    def setAdvanced(self):
-        self.tools.clear()
-        addActions(self.tools, self.actions.advanced)
+    # def setBeginner(self):
+    #     self.tools.clear()
+    #     addActions(self.tools, self.actions.beginner)
+
+    # def setAdvanced(self):
+    #     self.tools.clear()
+    #     addActions(self.tools, self.actions.advanced)
 
     def setDirty(self):
         self.dirty = True

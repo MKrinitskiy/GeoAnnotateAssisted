@@ -1,16 +1,17 @@
 import json
 import uuid
 import numpy as np
+import datetime
 
-class MCSlabel(object):
-    def __init__(self):
-        self.class_name = type(self).__name__
+class srvMClabel(object):
+    def __init__(self, sourcedata_fname = ''):
+        # self.class_name = type(self).__name__
+        self.class_name = ''
         self.uid = str(uuid.uuid4())
+        self.dt = datetime.datetime.utcnow()
         self.ltc_lon = 37.556730 + np.random.randn()*1e-2 # left top lon
         self.ltc_lat = 55.671874 + np.random.randn()*1e-2 # left top lon
         self.rbc_lon = 38.0 + np.random.randn()*1e-2 # right bottom lon
         self.rbc_lat = 55.0 + np.random.randn()*1e-2# right bottom lon
-
-
-    # def toJSON(self):
-    #     return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+        self.sourcedata_fname = sourcedata_fname
+        self.probability = 0.0

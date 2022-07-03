@@ -49,11 +49,8 @@ class Shape(object):
             else:
                 self.dt = datetime.now()
 
-            if self.label_type == 'MCS':
-                self.label = MCSlabel('', self.uid, self.dt, None, None)
-            elif ((self.label_type == 'MC') | (self.label_type == 'PL')):
-                self.label = MClabel('', self.uid, self.dt, None, None)
-        elif (isinstance(label, MCSlabel) | isinstance(label, MClabel)):
+            self.label = self.parent_canvas.parent.label_class('', self.uid, self.dt, None, None)
+        elif (isinstance(label, self.parent_canvas.parent.label_class)):
             self.label = label
             self.uid = label.uid
             self.dt = label.dt
