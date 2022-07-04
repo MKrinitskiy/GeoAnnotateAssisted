@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import codecs
 import distutils.spawn
 import os.path
@@ -221,27 +218,31 @@ class MainWindow(QMainWindow, WindowMixin):
         quit = action('&Quit', self.closing,
                       'Ctrl+Q', 'quit', u'Quit application')
 
-        open = action('&Open', self.openFile,
-                      'Ctrl+O', 'open', u'Open image or label file')
 
-        opendir = action('&Open Dir', self.openDirDialog,
-                         'Ctrl+u', 'open', u'Open Dir')
+
+        # open = action('&Open', self.openFile,
+        #               'Ctrl+O', 'open', u'Open image or label file')
+
+        # opendir = action('&Open Dir', self.openDirDialog,
+        #                  'Ctrl+u', 'open', u'Open Dir')
+
+        listServersideDataFiles = action('&List server-side\ndata files', self.openDirDialog, 'Ctrl+u', 'open', u'Open Dir')
 
         openNextImg = action('Next file', self.openNextImg,
                              'd', 'next', u'Open Next')
 
-        openPrevImg = action('&Prev Image', self.openPrevImg,
+        openPrevImg = action('&Prev file', self.openPrevImg,
                              'a', 'prev', u'Open Prev')
 
-        save = action('&Save', self.saveFile,
-                      'Ctrl+S', 'save', u'Save labels to file', enabled=False)
+        # save = action('&Save', self.saveFile,
+        #               'Ctrl+S', 'save', u'Save labels to file', enabled=False)
 
-        close = action('&Close', self.closeFile, 'Ctrl+W', 'close', u'Close current file')
+        # close = action('&Close', self.closeFile, 'Ctrl+W', 'close', u'Close current file')
 
         resetAll = action('&ResetAll', self.resetAll, None, 'resetall', u'Reset all')
 
-        color1 = action('Box Line Color', self.chooseColor1,
-                        'Ctrl+L', 'color_line', u'Choose Box line color')
+        # color1 = action('Box Line Color', self.chooseColor1,
+        #                 'Ctrl+L', 'color_line', u'Choose Box line color')
 
         createMode = action('Create new label', self.setCreateMode,
                             'w', 'new', u'Start drawing a new label', enabled=False)
@@ -327,9 +328,28 @@ class MainWindow(QMainWindow, WindowMixin):
         self.labelList.setContextMenuPolicy(Qt.CustomContextMenu)
         self.labelList.customContextMenuRequested.connect(self.popLabelListMenu)
 
-        self.actions = struct(save=save, open=open, close=close,
-                              resetAll=resetAll,
-                              lineColor=color1, create=create, delete=delete, edit=edit,
+        # self.actions = struct(save=save, open=open, close=close,
+        #                       resetAll=resetAll,
+        #                       lineColor=color1, create=create, delete=delete, edit=edit,
+        #                       createMode=createMode, editMode=editMode,
+        #                       shapeLineColor=shapeLineColor, shapeFillColor=shapeFillColor,
+        #                       zoom=zoom, zoomIn=zoomIn, zoomOut=zoomOut, zoomOrg=zoomOrg,
+        #                       fitWindow=fitWindow, fitWidth=fitWidth,
+        #                       zoomActions=zoomActions,
+        #                       refreshBasemap=zoomReplotBasemap,
+        #                       zoomHires=zoomIncreaseResolution,
+        #                       fileMenuActions=(open, opendir, save, close, resetAll, quit),
+        #                       beginner=(),
+        #                       advanced=(),
+        #                       editMenu=(edit, delete, None, color1),
+        #                       beginnerContext=(create, edit, delete, start_track, continue_track),
+        #                       advancedContext=(createMode, editMode, edit, delete, shapeLineColor, shapeFillColor),
+        #                       onLoadActive=(close, create, createMode, editMode),
+        #                       onShapesPresent=(hideAll, showAll),
+        #                       switchDataChannel=switchDataChannel)
+
+        self.actions = struct(resetAll=resetAll,
+                              create=create, delete=delete, edit=edit,
                               createMode=createMode, editMode=editMode,
                               shapeLineColor=shapeLineColor, shapeFillColor=shapeFillColor,
                               zoom=zoom, zoomIn=zoomIn, zoomOut=zoomOut, zoomOrg=zoomOrg,
@@ -337,13 +357,13 @@ class MainWindow(QMainWindow, WindowMixin):
                               zoomActions=zoomActions,
                               refreshBasemap=zoomReplotBasemap,
                               zoomHires=zoomIncreaseResolution,
-                              fileMenuActions=(open, opendir, save, close, resetAll, quit),
+                              fileMenuActions=(listServersideDataFiles, resetAll, quit),
                               beginner=(),
                               advanced=(),
-                              editMenu=(edit, delete, None, color1),
+                              editMenu=(edit, delete, None),
                               beginnerContext=(create, edit, delete, start_track, continue_track),
                               advancedContext=(createMode, editMode, edit, delete, shapeLineColor, shapeFillColor),
-                              onLoadActive=(close, create, createMode, editMode),
+                              onLoadActive=(create, createMode, editMode),
                               onShapesPresent=(hideAll, showAll),
                               switchDataChannel=switchDataChannel)
 
@@ -374,8 +394,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.paintLabelsOption.triggered.connect(self.togglePaintLabelsOption)
 
         addActions(self.menus.file,
-                   (open, opendir, self.menus.recentFiles, save,
-                    close, resetAll, quit))
+                   (listServersideDataFiles, resetAll, quit))
         # addActions(self.menus.help, (help, showInfo))
         addActions(self.menus.help, [showInfo])
         addActions(self.menus.view, (
@@ -396,12 +415,12 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.tools = self.toolbar('Tools')
         self.actions.beginner = (
-            open, opendir, openNextImg, openPrevImg, save, None, create,
+            listServersideDataFiles, openNextImg, openPrevImg, None, create,
             delete, None,
             zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
 
         self.actions.advanced = (
-            open, opendir, openNextImg, openPrevImg, save, None,
+            listServersideDataFiles, openNextImg, openPrevImg, None,
             createMode, editMode, None,
             hideAll, showAll)
 
@@ -1380,6 +1399,22 @@ class MainWindow(QMainWindow, WindowMixin):
     ## User Dialogs ##
 
 
+    def listServerSideDataFiles(self, _value=False, dirpath=None):
+        if not self.mayContinue():
+            return
+
+        defaultOpenDirPath = dirpath if dirpath else '.'
+        if self.lastOpenDir and os.path.exists(self.lastOpenDir):
+            defaultOpenDirPath = self.lastOpenDir
+        else:
+            defaultOpenDirPath = os.path.dirname(self.filePath) if self.filePath else '.'
+
+        targetDirPath = ustr(QFileDialog.getExistingDirectory(self,
+                                                     '%s - Open Directory' % __appname__, defaultOpenDirPath,
+                                                     QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        self.importDirImages(targetDirPath)
+
+
     def openDirDialog(self, _value=False, dirpath=None):
         if not self.mayContinue():
             return
@@ -1467,11 +1502,11 @@ class MainWindow(QMainWindow, WindowMixin):
             self.loadFile(filename)
 
 
-    def saveFile(self, _value=False):
-        if self.saveLabels():
-            self.setClean()
-            self.statusBar().showMessage('Saved labels to database')
-            self.statusBar().show()
+    # def saveFile(self, _value=False):
+    #     if self.saveLabels():
+    #         self.setClean()
+    #         self.statusBar().showMessage('Saved labels to database')
+    #         self.statusBar().show()
 
 
 
@@ -1482,6 +1517,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.setClean()
         self.toggleActions(False)
         self.canvas.setEnabled(False)
+
+
 
     def resetAll(self):
         self.settings.reset()
