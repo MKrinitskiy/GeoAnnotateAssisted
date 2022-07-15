@@ -226,7 +226,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # opendir = action('&Open Dir', self.openDirDialog,
         #                  'Ctrl+u', 'open', u'Open Dir')
 
-        listServersideDataFiles = action('&List server-side\ndata files', self.openDirDialog, 'Ctrl+u', 'open', u'Open Dir')
+        listServersideDataSnapshots = action('&List server-side\ndata files', self.ListServersideDataSnapshots, 'Ctrl+u', 'open', u'Open Dir')
 
         openNextImg = action('Next file', self.openNextImg,
                              'd', 'next', u'Open Next')
@@ -357,7 +357,7 @@ class MainWindow(QMainWindow, WindowMixin):
                               zoomActions=zoomActions,
                               refreshBasemap=zoomReplotBasemap,
                               zoomHires=zoomIncreaseResolution,
-                              fileMenuActions=(listServersideDataFiles, resetAll, quit),
+                              fileMenuActions=(listServersideDataSnapshots, resetAll, quit),
                               beginner=(),
                               advanced=(),
                               editMenu=(edit, delete, None),
@@ -394,7 +394,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.paintLabelsOption.triggered.connect(self.togglePaintLabelsOption)
 
         addActions(self.menus.file,
-                   (listServersideDataFiles, resetAll, quit))
+                   (listServersideDataSnapshots, resetAll, quit))
         # addActions(self.menus.help, (help, showInfo))
         addActions(self.menus.help, [showInfo])
         addActions(self.menus.view, (
@@ -415,12 +415,12 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.tools = self.toolbar('Tools')
         self.actions.beginner = (
-            listServersideDataFiles, openNextImg, openPrevImg, None, create,
+            listServersideDataSnapshots, openNextImg, openPrevImg, None, create,
             delete, None,
             zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
 
         self.actions.advanced = (
-            listServersideDataFiles, openNextImg, openPrevImg, None,
+            listServersideDataSnapshots, openNextImg, openPrevImg, None,
             createMode, editMode, None,
             hideAll, showAll)
 
@@ -518,7 +518,23 @@ class MainWindow(QMainWindow, WindowMixin):
             self.openDirDialog(dirpath=self.filePath)
 
 
+    @property
+    def basemaphelper(self):
+        if not self._basemaphelper:
+            self._basemaphelper = self.create_basemaphelper()
+        return self._basemaphelper
 
+
+    def create_basemaphelper(self):
+        try:
+            helper = TrackingBasemapHelperClass(args)
+            helper.initiate()
+        except:
+            helper = None
+            ReportException('./logs/error.log', None)
+            error_dialog = QErrorMessage()
+            error_dialog.showMessage('Unable to create client-server communication agent.\nThe app functionality will be limited.')
+        return helper
 
     def noShapes(self):
         return not self.itemsToShapes
@@ -1415,20 +1431,32 @@ class MainWindow(QMainWindow, WindowMixin):
         self.importDirImages(targetDirPath)
 
 
-    def openDirDialog(self, _value=False, dirpath=None):
-        if not self.mayContinue():
-            return
+    def ListServersideDataSnapshots(self, _value=False):
+        # if not self.mayContinue():
+        #     return
 
-        defaultOpenDirPath = dirpath if dirpath else '.'
-        if self.lastOpenDir and os.path.exists(self.lastOpenDir):
-            defaultOpenDirPath = self.lastOpenDir
-        else:
-            defaultOpenDirPath = os.path.dirname(self.filePath) if self.filePath else '.'
+        # defaultOpenDirPath = dirpath if dirpath else '.'
+        # if self.lastOpenDir and os.path.exists(self.lastOpenDir):
+        #     defaultOpenDirPath = self.lastOpenDir
+        # else:
+        #     defaultOpenDirPath = os.path.dirname(self.filePath) if self.filePath else '.'
+        #
+        # targetDirPath = ustr(QFileDialog.getExistingDirectory(self,
+        #                                              '%s - Open Directory' % __appname__, defaultOpenDirPath,
+        #                                              QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
 
-        targetDirPath = ustr(QFileDialog.getExistingDirectory(self,
-                                                     '%s - Open Directory' % __appname__, defaultOpenDirPath,
-                                                     QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        self.basemaphelper =
+
         self.importDirImages(targetDirPath)
+
+    def importServersideDataSnapshotsList(self, serversideDataSnapshotsList):
+        self.currDataUUID = ''
+        self.fileListWidget.clear()
+        self.mImgList = find_files(dirpath, '*.nc')
+        self.mImgList = SortFNamesByDateTime(self.mImgList)
+        for imgPath in self.mImgList:
+            item = QListWidgetItem(imgPath)
+            self.fileListWidget.addItem(item)
 
     def importDirImages(self, dirpath):
         if not self.mayContinue() or not dirpath:

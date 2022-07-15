@@ -1,3 +1,4 @@
+import datetime
 import os, sys
 python_path = sys.executable
 if sys.platform == 'win32':
@@ -14,16 +15,17 @@ from libs.TrackingBasemapHelper import *
 import binascii, logging, time
 from PIL import Image
 from io import BytesIO
-from libs.CNNPredictor import CNNPredictor
 import json
 import sys
 import collections
-import torch
 from libs.parse_args import parse_args
 
 
 args = sys.argv[1:]
 args = parse_args(args)
+if not args.no_cnn:
+    from libs.CNNPredictor import CNNPredictor
+
 
 if 'gpu' in args.__dict__.keys():
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
@@ -49,49 +51,104 @@ def main():
     return response
 
 
-def MakeTrackingBasemapHelper_progress(curr_fname, calculateLatLonLimits = True, resolution = 'f', webapi_client_id = ''):
+def MakeTrackingBasemapHelper_progress(webapi_client_id = ''):
     if webapi_client_id == '':
         raise Exception('client ID not specified!')
-    x = 0
-    total_steps = 6
+
+    step = 0
+    total_steps = 1
+
     while True:
         step_description = ''
-        if x == 0:
+        if step == 0:
             step_description = 'TrackingBasemapHelperClass'
-        elif x == 1:
-            step_description = 'ReadSourceData'
-        elif x == 2:
-            step_description = 'createBasemapObj'
-        elif x == 3:
-            step_description = 'PlotBasemapBackground'
-        elif x == 4:
-            step_description = 'PlotDataLayer'
-        elif x == 5:
-            step_description = 'FuseBasemapWithData'
 
-        yield 'step %d / %d : %s\n' % (x+1, total_steps, step_description)
-        print('step %d / %d ^ %s' % (x+1, total_steps, step_description))
+        yield 'step %d / %d : %s\n' % (step + 1, total_steps, step_description)
+        print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
 
-        if x == 0:
-            app.bmhelpers[webapi_client_id] = TrackingBasemapHelperClass(curr_fname)
-        elif x == 1:
+        if step == 0:
+            app.bmhelpers[webapi_client_id] = TrackingBasemapHelperClass()
+            yield 'READY\n'
+            print('READY')
+            break
+
+        step = step + 1
+
+
+def ListAvailableDataSnapshots_progress(dt_start: datetime.datetime = datetime.datetime(1970, 1, 1, 0, 0, 0),
+                                        dt_end: datetime.datetime = datetime.datetime(2101, 1, 1, 0, 0, 0),
+                                        webapi_client_id = ''):
+    if webapi_client_id == '':
+        raise Exception('client ID not specified!')
+
+    step = 0
+    total_steps = 1
+
+    while True:
+        step_description = ''
+        if step == 0:
+            step_description = 'TrackingBasemapHelperClass'
+
+        yield 'step %d / %d : %s\n' % (step + 1, total_steps, step_description)
+        print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
+
+        if step == 0:
+            # app.bmhelpers[webapi_client_id] = TrackingBasemapHelperClass()
+            sourceDataManager = app.bmhelpers[webapi_client_id].sourceDataManager
+
+            yield 'READY\n'
+            print('READY')
+            break
+
+        step = step + 1
+
+
+
+def ProcessSourceData_progress(curr_fname, calculateLatLonLimits = True, resolution = 'f', webapi_client_id = ''):
+    if webapi_client_id == '':
+        raise Exception('client ID not specified!')
+    elif webapi_client_id not in app.bmhelpers.keys():
+        raise Exception('there is no basemap helper object for this client yet!!')
+
+    step = 0
+    total_steps = 5
+
+    while True:
+        step_description = ''
+        if step == 0:
+            step_description = 'Reading source data'
+        elif step == 1:
+            step_description = 'Creating Basemap object'
+        elif step == 2:
+            step_description = 'Plotting Basemap background'
+        elif step == 3:
+            step_description = 'Plotting Data Layer'
+        elif step == 4:
+            step_description = 'Fusing Basemapbeckground with Data layer'
+
+        yield 'step %d / %d : %s\n' % (step + 1, total_steps, step_description)
+        print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
+
+        if step == 0:
             app.bmhelpers[webapi_client_id].ReadSourceData(calculateLatLonLimits)
-        elif x == 2:
+        elif step == 1:
             app.bmhelpers[webapi_client_id].createBasemapObj(resolution=resolution)
-        elif x == 3:
+        elif step == 2:
             app.bmhelpers[webapi_client_id].PlotBasemapBackground()
-        elif x == 4:
+        elif step == 3:
             app.bmhelpers[webapi_client_id].PlotDataLayer(debug=False)
             ### DEBUG ###
             # for dataname in app.bmhelper.channelNames:
             #     app.bmhelper.__dict__['DataLayerImage_%s' % dataname] = np.copy(app.bmhelper.BasemapLayerImage)
-        elif x == 5:
+        elif step == 4:
             app.bmhelpers[webapi_client_id].FuseBasemapWithData()
             yield 'READY\n'
             print('READY')
             break
 
-        x = x + 1
+        step = step + 1
+
+
 
 
 def SetNewLatLonLimits_progress(llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, resolution='c', webapi_client_id = ''):
@@ -99,42 +156,43 @@ def SetNewLatLonLimits_progress(llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, reso
         raise Exception('client ID not specified!')
     elif webapi_client_id not in app.bmhelpers.keys():
         raise Exception('there is no basemap helper object for this client yet!!')
-    x = 0
+    step = 0
     total_steps = 5
     while True:
         step_description = ''
-        if x == 0:
+        if step == 0:
             step_description = 'SetNewLatLonLimits'
-        elif x == 1:
+        elif step == 1:
             step_description = 'createBasemapObj'
-        elif x == 2:
+        elif step == 2:
             step_description = 'PlotBasemapBackground'
-        elif x == 3:
+        elif step == 3:
             step_description = 'PlotDataLayer'
-        elif x == 4:
+        elif step == 4:
             step_description = 'FuseBasemapWithData'
 
-        yield 'step %d / %d : %s\n' % (x+1, total_steps, step_description)
-        print('step %d / %d ^ %s' % (x+1, total_steps, step_description))
+        yield 'step %d / %d : %s\n' % (step + 1, total_steps, step_description)
+        print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
 
-        if x == 0:
+        if step == 0:
             app.bmhelpers[webapi_client_id].SetNewLatLonLimits(llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat)
-        elif x == 1:
+        elif step == 1:
             app.bmhelpers[webapi_client_id].createBasemapObj(resolution=resolution)
-        elif x == 2:
+        elif step == 2:
             app.bmhelpers[webapi_client_id].PlotBasemapBackground()
-        elif x == 3:
+        elif step == 3:
             app.bmhelpers[webapi_client_id].PlotDataLayer(debug=False)
             ### DEBUG ###
             # for dataname in app.bmhelper.channelNames:
             #     app.bmhelper.__dict__['DataLayerImage_%s' % dataname] = np.copy(app.bmhelper.BasemapLayerImage)
-        elif x == 4:
+        elif step == 4:
             app.bmhelpers[webapi_client_id].FuseBasemapWithData()
             yield 'READY\n'
             print('READY')
             break
 
-        x = x + 1
+        step = step + 1
+
 
 
 def SwitchSourceData_progress(curr_fname, webapi_client_id = ''):
@@ -225,14 +283,62 @@ def PredictMCS_progress(curr_fname, webapi_client_id = ''):
 @app.route('/exec', methods=['GET'])
 def exec():
     command = request.args['command']
+
     if command == 'createbmhelper':
         try:
-            arg_src_fname = request.args['src_fname']
+            webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
             ReportException('./logs/app.log', ex)
-            response = make_response('source file was not specified')
-            response.headers['ErrorDesc'] = 'FileNotFound'
+            response = make_response('client webapi ID was not specified')
+            response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
+            return response
+
+        return Response(MakeTrackingBasemapHelper_progress(webapi_client_id=webapi_client_id), mimetype='text/stream')
+
+    elif command == 'listData':
+        try:
+            webapi_client_id = request.args['webapi_client_id']
+        except Exception as ex:
+            print(ex)
+            ReportException('./logs/app.log', ex)
+            response = make_response('client webapi ID was not specified')
+            response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
+            return response
+
+        try:
+            dt_start = request.args['dt_start']
+        except Exception as ex:
+            dt_start = datetime.datetime(1900, 1, 1, 0, 0, 0)
+
+        try:
+            dt_end = request.args['dt_end']
+        except Exception as ex:
+            dt_end = datetime.datetime(2101, 1, 1, 23, 59, 59)
+
+        # sourceDataManager = app.bmhelpers[webapi_client_id].sourceDataManager
+
+        return Response(ListAvailableDataSnapshots_progress(dt_start, dt_end,
+                                                            webapi_client_id=webapi_client_id),
+                        mimetype='text/stream')
+
+        available_data_snapshots = sourceDataManager.ListAvailableData(dt_start, dt_end)
+        if available_data_snapshots == 0:
+            response = make_response('There is no data in this date/time range')
+            response.headers['ErrorDesc'] = 'DataListEmpty'
+            return response
+        else:
+            response = jsonify(sourceDataManager.uids2DataDesc)
+            return response
+
+    elif command == 'processDataSnapshot':
+        try:
+            arg_srcdata_uuid = request.args['src_data_uuid']
+        except Exception as ex:
+            print(ex)
+            ReportException('./logs/app.log', ex)
+            response = make_response('source data uuid was not specified')
+            response.headers['ErrorDesc'] = 'DataNotFound'
             return response
 
         try:
@@ -249,12 +355,12 @@ def exec():
             calculateLatLonLimits = True if (calculateLatLonLimits.lower() == 'true') else False
         except:
             calculateLatLonLimits = True
+
         try:
             resolution = request.args['resolution']
         except:
             resolution = 'f'
 
-        # curr_fname = os.path.join(os.getcwd(), 'src_data', arg_src_fname)
         datetime_fname_stamp = os.path.splitext(os.path.basename(arg_src_fname))[0][-14:]
         sat_name = os.path.splitext(os.path.basename(arg_src_fname))[0][-33:-29]
         found_fnames = [f for f in find_files('./src_data/', '*%s*%s.nc' % (sat_name, datetime_fname_stamp))]
@@ -276,6 +382,8 @@ def exec():
                                                                resolution,
                                                                webapi_client_id=webapi_client_id),
                             mimetype='text/stream')
+
+
 
     elif command == 'SetNewLatLonLimits':
         try:
@@ -347,7 +455,12 @@ def exec():
             response.headers['ErrorDesc'] = 'DataNotLoaded'
             return response
 
-        return Response(PredictMCS_progress(app.bmhelpers[webapi_client_id].dataSourceFile, webapi_client_id=webapi_client_id), mimetype='text/stream')
+        if args.no_cnn:
+            response = make_response('CNN functionality is turned off for this service.')
+            response.headers['ErrorDesc'] = 'CNNturnedOFF'
+            return response
+        else:
+            return Response(PredictMCS_progress(app.bmhelpers[webapi_client_id].dataSourceFile, webapi_client_id=webapi_client_id), mimetype='text/stream')
 
 
 @app.route('/images', methods=['GET'])
@@ -446,4 +559,5 @@ def imdone():
 
 
 
-app.run(host='127.0.0.1', port=1999)
+if __name__ == '__main__':
+    app.run(host='127.0.0.1', port=1999)

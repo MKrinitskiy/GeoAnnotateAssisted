@@ -17,6 +17,7 @@ import pickle
 import uuid
 import threading
 from .colormaps import *
+from .SourceDataManagers import *
 
 
 
@@ -88,7 +89,7 @@ nu_central = {'ch4': 2547.771 ,
 
 
 class TrackingBasemapHelperClass(object):
-    def __init__(self, dataSourceFile):
+    def __init__(self, dataSourceFile = None):
         self.dataSourceFile = dataSourceFile
         self.zoom = 1.0
         self.cLat = None
@@ -100,7 +101,6 @@ class TrackingBasemapHelperClass(object):
         self.urcrnrlon = None
         self.urcrnrlat = None
         self.BasemapLayerImage = None
-        # self.DataLayerImage = None
         self.CVimageCombined = None
         self.dataToPlot = 'ch9'
 
@@ -117,6 +117,7 @@ class TrackingBasemapHelperClass(object):
         self.channelVmin = [norm_constants.ch9_vmin, norm_constants.ch5_vmin, norm_constants.btd_vmin]
         self.channelVmax = [norm_constants.ch9_vmax, norm_constants.ch5_vmax, norm_constants.btd_vmax]
 
+        self.sourceDataManager = SourceDataManager_METEOSAT()
 
 
     # def create_ch5_cmap(self):
@@ -372,14 +373,6 @@ class TrackingBasemapHelperClass(object):
         # DEBUG
         # DataLayerImageCV = cv2.imdecode(self.__dict__['DataLayerImage_%s' % self.dataToPlot], cv2.IMREAD_COLOR)
         # self.CVimageCombined = DataLayerImageCV
-
-
-    # def CVimageCombined_RGB888(self):
-    #     if self.CVimageCombined is None:
-    #         return None
-    #     else:
-    #         new_img = np.flip(self.CVimageCombined, axis=-1).copy()
-    #         return new_img
 
 
 

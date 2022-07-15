@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import sys
@@ -88,10 +89,11 @@ Channel | Band     | λcen   | λmin  | λmax  |
 #              'ch11': 750.653 }
 
 
-class TrackingBasemapHelperClass(object):
-    def __init__(self, dataSourceFile, app_args):
+class TrackingBasemapHelperClass:
+    def __init__(self, app_args):
         self.app_args = app_args
-        self.dataSourceFile = dataSourceFile
+        self.dataSourceServersideUUID = ''
+        self.dataSourceServersideDatetime = datetime.datetime(1970,1,1,0,0,0)
         self.zoom = 1.0
         self.cLat = None
         self.cLon = None
@@ -184,61 +186,91 @@ class TrackingBasemapHelperClass(object):
         print(req1.status_code)
 
 
+
     def initiate(self, resolution = 'c', calculateLatLonLimits=True):
-        # self.ReadSourceData()
-        url1 = 'http://%s:1999/exec?command=createbmhelper&src_fname=%s&resolution=%s&calculateLatLonLimits=%s&webapi_client_id=%s' % (self.remotehost, os.path.basename(self.dataSourceFile), resolution, str(calculateLatLonLimits), self.webapi_client_id)
-        url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        url = 'http://%s:1999/exec?command=createbmhelper&webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
         try:
-            req1 = requests.get(url1, stream=True)
+            req = requests.get(url, stream=True)
             if self.app_args.http_logging:
-                logging.info(url1)
+                logging.info(url)
         except Exception as ex:
             print('Request failed. Please check the connection.')
             ReportException('./logs/errors.log', ex)
             raise RequestFailedException()
 
 
-        print(req1.headers)
-        ctype = req1.headers['Content-Type']
+        print(req.headers)
+        ctype = req.headers['Content-Type']
         m = re.match(r'.+charset=(.+)', ctype)
         enc = 'utf-8'
         if m is not None:
             enc = m.groups()[0]
             print('encoding detected: %s' % enc)
-        print(req1.status_code)
+        print(req.status_code)
 
-        for line in streamlines_gen(req1):
+        for line in streamlines_gen(req):
             print(line)
             if line == 'READY':
-                print('got READY response')
-                print('requesting image')
+                print('Got READY response. Serverside client-server comm.agent is ready.')
 
-                try:
-                    req2 = requests.get(url2)
-                    if self.app_args.http_logging:
-                        logging.info(url2)
-                except Exception as ex:
-                    print('Request failed. Please check the connection.')
-                    ReportException('./logs/errors.log', ex)
-                    raise RequestFailedException()
 
-                print(req2.status_code)
-                print(req2.headers)
-                # with open(os.path.join(os.getcwd(), 'demo', r2.headers['fileName']), 'wb') as f:
-                #     f.write(r2.content)
+    def RequestDataSnapshotsList(self,
+                                 dt_start: datetime.datetime = datetime.datetime(1970, 1, 1, 0, 0, 0),
+                                 dt_end: datetime.datetime = datetime.datetime(2101, 1, 1, 0, 0, 0)):
 
-                rec_dict = None
-                with BytesIO() as bytesf:
-                    bytesf.write(req2.content)
-                    bytesf.seek(0)
-                    # pilImage = Image.open(bytesf, 'r')
-                    # cv2Image = np.copy(np.array(pilImage))
-                    rec_dict = pickle.load(bytesf)
+        url = 'http://%s:1999/exec?command=listData&webapi_client_id=%s&dt_start=%s&dt_end=%s' % (self.remotehost,
+                                                                                                  self.webapi_client_id,
+                                                                                                  datetime.datetime.strftime(dt_start, '%Y-%m-%d-%H-%M-%S'),
+                                                                                                  datetime.datetime.strftime(dt_end, '%Y-%m-%d-%H-%M-%S'))
+        try:
+            req = requests.get(url, stream=True)
+            if self.app_args.http_logging:
+                logging.info(url)
+        except Exception as ex:
+            print('Request failed. Please check the connection.')
+            ReportException('./logs/errors.log', ex)
+            raise RequestFailedException()
 
-                if rec_dict is not None:
-                    self.deflate_recieved_dict(rec_dict)
-                else:
-                    raise Exception('Generated images transfer failed.')
+
+        print(req.headers)
+        ctype = req.headers['Content-Type']
+        m = re.match(r'.+charset=(.+)', ctype)
+        enc = 'utf-8'
+        if m is not None:
+            enc = m.groups()[0]
+            print('encoding detected: %s' % enc)
+        print(req.status_code)
+
+        for line in streamlines_gen(req):
+            print(line)
+            if line == 'READY':
+                print('Got READY response. Serverside client-server comm.agent is ready.')
+
+
+    def RequestPreparedImages(self, resolution = 'c', calculateLatLonLimits=True):
+        url = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        try:
+            req = requests.get(url)
+            if self.app_args.http_logging:
+                logging.info(url)
+        except Exception as ex:
+            print('Request failed. Please check the connection.')
+            ReportException('./logs/errors.log', ex)
+            raise RequestFailedException()
+
+        print(req.status_code)
+        print(req.headers)
+
+        rec_dict = None
+        with BytesIO() as bytesf:
+            bytesf.write(req.content)
+            bytesf.seek(0)
+            rec_dict = pickle.load(bytesf)
+
+        if rec_dict is not None:
+            self.deflate_recieved_dict(rec_dict)
+        else:
+            raise Exception('Generated images transfer failed.')
 
 
     def FuseBasemapWithData(self, alpha = 0.3, beta = 0.7):

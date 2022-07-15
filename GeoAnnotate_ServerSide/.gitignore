@@ -16,3 +16,4 @@ venv.bak/
 /cache/
 /docker_service/
 *.log
+/.cache/
