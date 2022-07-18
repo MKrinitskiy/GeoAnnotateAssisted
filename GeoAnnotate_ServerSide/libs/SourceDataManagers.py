@@ -29,7 +29,10 @@ def MSG_label(nc_basename):
 class SourceDataManager_METEOSAT:
     def __init__(self, baseDataDirectory = './'):
         self.baseDataDirectory = baseDataDirectory
-        self.dataSnapshots = {}
+        # self.dataSnapshots = {}
+        self.uids2DataDesc = {}
+        self.uids2datetime = {}
+
 
     def ListAvailableData(self, dt_start: datetime.datetime, dt_end: datetime.datetime):
         assert type(dt_start) is datetime.datetime
@@ -39,6 +42,7 @@ class SourceDataManager_METEOSAT:
 
         fnames_df = pd.DataFrame(found_fnames, columns=['full_fname'])
         fnames_df['dt'] = fnames_df['full_fname'].apply(dt)
+        fnames_df['dt_str'] = fnames_df['dt'].apply(lambda x: datetime.datetime.strftime(x, '%Y-%m-%d-%H-%M-%S'))
         fnames_df['MSG_label'] = fnames_df['full_fname'].apply(MSG_label)
         fnames_df_filtered = fnames_df[((fnames_df['dt'] >= dt_start) & (fnames_df['dt'] <= dt_end))]
         fnames_df_filtered = fnames_df_filtered.sort_values('dt')

@@ -1,4 +1,5 @@
 import codecs
+import datetime
 import distutils.spawn
 import os.path
 import cv2
@@ -63,8 +64,9 @@ class MainWindow(QMainWindow, WindowMixin):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
 
+        self._basemaphelper = None
+
         # LabelFile.suffix = MCC_XML_EXT
-        self.basemaphelper = None
         self.trackingFunctionsAvailable = False
 
         # Load setting in the main thread
@@ -499,10 +501,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.updateFileMenu()
 
         # Since loading the file may take some time, make sure it runs in the background.
-        if self.filePath and os.path.isdir(self.filePath):
-            self.queueEvent(partial(self.importDirImages, self.filePath or ""))
-        elif self.filePath:
-            self.queueEvent(partial(self.loadFile, self.filePath or ""))
+        # if self.filePath and os.path.isdir(self.filePath):
+        #     self.queueEvent(partial(self.importDirImages, self.filePath or ""))
+        # elif self.filePath:
+        #     self.queueEvent(partial(self.loadFile, self.filePath or ""))
 
         # Callbacks:
         self.zoomWidget.valueChanged.connect(self.paintCanvas)
@@ -520,10 +522,11 @@ class MainWindow(QMainWindow, WindowMixin):
 
     @property
     def basemaphelper(self):
-        if not self._basemaphelper:
+        if self._basemaphelper:
+            return self._basemaphelper
+        else:
             self._basemaphelper = self.create_basemaphelper()
-        return self._basemaphelper
-
+            return self._basemaphelper
 
     def create_basemaphelper(self):
         try:
@@ -761,13 +764,21 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
 
-
     def fileitemDoubleClicked(self, item=None):
-        currIndex = self.mImgList.index(ustr(item.text()))
-        if currIndex < len(self.mImgList):
-            filename = self.mImgList[currIndex]
-            if filename:
-                self.loadFile(filename)
+        pattern = r'.+:uuid:(.+)'
+        selected_str = ustr(item.text())
+        m = re.match(pattern, selected_str)
+        curr_uuid = m.groups()[0]
+        item.setSelected(True)
+        self.loadFile(curr_uuid)
+
+
+    # def fileitemDoubleClicked(self, item=None):
+    #     currIndex = self.mImgList.index(ustr(item.text()))
+    #     if currIndex < len(self.mImgList):
+    #         filename = self.mImgList[currIndex]
+    #         if filename:
+    #             self.loadFile(filename)
 
 
 
@@ -1273,83 +1284,153 @@ class MainWindow(QMainWindow, WindowMixin):
             item.setCheckState(Qt.Checked if value else Qt.Unchecked)
 
 
-    def loadFile(self, filePath=None):
+
+    def loadFile(self, uuid=None):
         self.resetState()
         self.canvas.setEnabled(False)
-        if filePath is None:
-            filePath = self.settings.get(SETTING_FILENAME)
+        if uuid is None:
+            return
 
-        filePath = ustr(filePath)
+        curr_srcdata_row = self.basemaphelper.srvSourceDataList[self.basemaphelper.srvSourceDataList['uuid'] == uuid].iloc[0,:]  # supposedly it will be 1-row DataFrame
 
-        unicodeFilePath = ustr(filePath)
-        if unicodeFilePath and self.fileListWidget.count() > 0:
-            index = self.mImgList.index(unicodeFilePath)
-            fileWidgetItem = self.fileListWidget.item(index)
-            fileWidgetItem.setSelected(True)
+        self.currDataUUID = uuid
+        self.curr_dt = curr_srcdata_row['dt']
 
-        if unicodeFilePath and os.path.exists(unicodeFilePath):
-            self.curr_dt = DateTimeFromDataFName(unicodeFilePath)
+        try:
+            self.basemaphelper.SwitchSourceData(uuid)
+            self.basemaphelper.FuseBasemapWithData()
+        except:
+            ReportException('./error.log', None)
+            return False
 
-            try:
-                if self.preserveBasemapConfig.isChecked() & (self.basemaphelper is not None):
-                    self.basemaphelper = read(unicodeFilePath, default = self.basemaphelper)
-                else:
-                    self.basemaphelper = read(unicodeFilePath, None)
-            except:
-                ReportException('./error.log', None)
-                return False
+        height, width, channel = self.basemaphelper.CVimageCombined.shape
+        bytesPerLine = 3 * width
 
-            height, width, channel = self.basemaphelper.CVimageCombined.shape
-            bytesPerLine = 3 * width
+        self.imageData = self.basemaphelper.CVimageCombined
+        self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
+        self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
+        image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
 
-            self.imageData = self.basemaphelper.CVimageCombined
-            self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
-            self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
-            image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
+        # if image.isNull():
+        #     self.errorMessage(u'Error opening file',
+        #                       u"<p>Make sure <i>%s</i> is a valid image file." % unicodeFilePath)
+        #     self.status("Error reading %s" % unicodeFilePath)
+        #     return False
 
-            # self.labelFile = None
+        self.status("Loaded data for %s with serverside-uuid: %s" % (datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%s'), uuid))
+        self.image = image
+        # self.filePath = unicodeFilePath
+        self.canvas.loadPixmap(QPixmap.fromImage(image))
 
-            # image = QImage.fromData(self.imageData)
-            if image.isNull():
-                self.errorMessage(u'Error opening file',
-                                  u"<p>Make sure <i>%s</i> is a valid image file." % unicodeFilePath)
-                self.status("Error reading %s" % unicodeFilePath)
-                return False
+        self.setClean()
+        self.canvas.setEnabled(True)
+        self.adjustScale(initial=True)
+        self.paintCanvas()
+        self.addRecentFile(self.filePath)
+        self.toggleActions(True)
 
-            self.status("Loaded %s" % os.path.basename(unicodeFilePath))
-            self.image = image
-            self.filePath = unicodeFilePath
-            self.canvas.loadPixmap(QPixmap.fromImage(image))
+        self.actions.refreshBasemap.setEnabled(True)
+        self.actions.zoomHires.setEnabled(True)
+        self.actions.switchDataChannel.setEnabled(True)
 
-            self.setClean()
-            self.canvas.setEnabled(True)
-            self.adjustScale(initial=True)
-            self.paintCanvas()
-            self.addRecentFile(self.filePath)
-            self.toggleActions(True)
+        labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
+        self.loadLabels(labels_from_database)
 
-            self.actions.refreshBasemap.setEnabled(True)
-            self.actions.zoomHires.setEnabled(True)
-            self.actions.switchDataChannel.setEnabled(True)
+        if self.settings.get(SETTING_DETECTION_USE_NEURAL_ASSISTANCE):
+            labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
+            if labels_cnn_predicted is not None:
+                self.loadPredictedLabels(labels_cnn_predicted)
 
-            labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
-            self.loadLabels(labels_from_database)
+        self.setWindowTitle(__appname__ + ' ' + "%s :uuid: %s" % (datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%s'), uuid))
 
-            if self.settings.get(SETTING_DETECTION_USE_NEURAL_ASSISTANCE):
-                labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
-                if labels_cnn_predicted is not None:
-                    self.loadPredictedLabels(labels_cnn_predicted)
+        # Default : select last item if there is at least one item
+        if self.labelList.topLevelItemCount():
+            self.labelList.setCurrentItem(self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1))
+            self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1).setSelected(True)
 
-            self.setWindowTitle(__appname__ + ' ' + filePath)
+        self.canvas.setFocus(True)
+        return True
 
-            # Default : select last item if there is at least one item
-            if self.labelList.topLevelItemCount():
-                self.labelList.setCurrentItem(self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1))
-                self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1).setSelected(True)
 
-            self.canvas.setFocus(True)
-            return True
-        return False
+
+
+    # def loadFile(self, filePath=None):
+    #     self.resetState()
+    #     self.canvas.setEnabled(False)
+    #     if filePath is None:
+    #         filePath = self.settings.get(SETTING_FILENAME)
+    #
+    #     filePath = ustr(filePath)
+    #
+    #     unicodeFilePath = ustr(filePath)
+    #     if unicodeFilePath and self.fileListWidget.count() > 0:
+    #         index = self.mImgList.index(unicodeFilePath)
+    #         fileWidgetItem = self.fileListWidget.item(index)
+    #         fileWidgetItem.setSelected(True)
+    #
+    #     if unicodeFilePath and os.path.exists(unicodeFilePath):
+    #         self.curr_dt = DateTimeFromDataFName(unicodeFilePath)
+    #
+    #         try:
+    #             if self.preserveBasemapConfig.isChecked() & (self.basemaphelper is not None):
+    #                 self.basemaphelper = read(unicodeFilePath, default = self.basemaphelper)
+    #             else:
+    #                 self.basemaphelper = read(unicodeFilePath, None)
+    #         except:
+    #             ReportException('./error.log', None)
+    #             return False
+    #
+    #         height, width, channel = self.basemaphelper.CVimageCombined.shape
+    #         bytesPerLine = 3 * width
+    #
+    #         self.imageData = self.basemaphelper.CVimageCombined
+    #         self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
+    #         self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
+    #         image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
+    #
+    #         # self.labelFile = None
+    #
+    #         # image = QImage.fromData(self.imageData)
+    #         if image.isNull():
+    #             self.errorMessage(u'Error opening file',
+    #                               u"<p>Make sure <i>%s</i> is a valid image file." % unicodeFilePath)
+    #             self.status("Error reading %s" % unicodeFilePath)
+    #             return False
+    #
+    #         self.status("Loaded %s" % os.path.basename(unicodeFilePath))
+    #         self.image = image
+    #         self.filePath = unicodeFilePath
+    #         self.canvas.loadPixmap(QPixmap.fromImage(image))
+    #
+    #         self.setClean()
+    #         self.canvas.setEnabled(True)
+    #         self.adjustScale(initial=True)
+    #         self.paintCanvas()
+    #         self.addRecentFile(self.filePath)
+    #         self.toggleActions(True)
+    #
+    #         self.actions.refreshBasemap.setEnabled(True)
+    #         self.actions.zoomHires.setEnabled(True)
+    #         self.actions.switchDataChannel.setEnabled(True)
+    #
+    #         labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
+    #         self.loadLabels(labels_from_database)
+    #
+    #         if self.settings.get(SETTING_DETECTION_USE_NEURAL_ASSISTANCE):
+    #             labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
+    #             if labels_cnn_predicted is not None:
+    #                 self.loadPredictedLabels(labels_cnn_predicted)
+    #
+    #         self.setWindowTitle(__appname__ + ' ' + filePath)
+    #
+    #         # Default : select last item if there is at least one item
+    #         if self.labelList.topLevelItemCount():
+    #             self.labelList.setCurrentItem(self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1))
+    #             self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1).setSelected(True)
+    #
+    #         self.canvas.setFocus(True)
+    #         return True
+    #     return False
 
 
 
@@ -1415,62 +1496,49 @@ class MainWindow(QMainWindow, WindowMixin):
     ## User Dialogs ##
 
 
-    def listServerSideDataFiles(self, _value=False, dirpath=None):
-        if not self.mayContinue():
-            return
-
-        defaultOpenDirPath = dirpath if dirpath else '.'
-        if self.lastOpenDir and os.path.exists(self.lastOpenDir):
-            defaultOpenDirPath = self.lastOpenDir
-        else:
-            defaultOpenDirPath = os.path.dirname(self.filePath) if self.filePath else '.'
-
-        targetDirPath = ustr(QFileDialog.getExistingDirectory(self,
-                                                     '%s - Open Directory' % __appname__, defaultOpenDirPath,
-                                                     QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
-        self.importDirImages(targetDirPath)
+    # def listServerSideDataFiles(self, _value=False, dirpath=None):
+    #     if not self.mayContinue():
+    #         return
+    #
+    #     defaultOpenDirPath = dirpath if dirpath else '.'
+    #     if self.lastOpenDir and os.path.exists(self.lastOpenDir):
+    #         defaultOpenDirPath = self.lastOpenDir
+    #     else:
+    #         defaultOpenDirPath = os.path.dirname(self.filePath) if self.filePath else '.'
+    #
+    #     targetDirPath = ustr(QFileDialog.getExistingDirectory(self,
+    #                                                  '%s - Open Directory' % __appname__, defaultOpenDirPath,
+    #                                                  QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+    #     self.importDirImages(targetDirPath)
 
 
     def ListServersideDataSnapshots(self, _value=False):
-        # if not self.mayContinue():
-        #     return
+        self.basemaphelper.RequestDataSnapshotsList(datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 12, 31, 23, 59, 59))
 
-        # defaultOpenDirPath = dirpath if dirpath else '.'
-        # if self.lastOpenDir and os.path.exists(self.lastOpenDir):
-        #     defaultOpenDirPath = self.lastOpenDir
-        # else:
-        #     defaultOpenDirPath = os.path.dirname(self.filePath) if self.filePath else '.'
-        #
-        # targetDirPath = ustr(QFileDialog.getExistingDirectory(self,
-        #                                              '%s - Open Directory' % __appname__, defaultOpenDirPath,
-        #                                              QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+        self.importServersideDataSnapshotsList(self.basemaphelper.srvSourceDataList)
 
-        self.basemaphelper =
-
-        self.importDirImages(targetDirPath)
-
-    def importServersideDataSnapshotsList(self, serversideDataSnapshotsList):
+    def importServersideDataSnapshotsList(self, srvSourceDataList):
         self.currDataUUID = ''
         self.fileListWidget.clear()
-        self.mImgList = find_files(dirpath, '*.nc')
-        self.mImgList = SortFNamesByDateTime(self.mImgList)
-        for imgPath in self.mImgList:
-            item = QListWidgetItem(imgPath)
+        # srvSourceDataList should be Pandas.DataFrame
+        for idx,row in srvSourceDataList.iterrows():
+            item_str = '%s :uuid:%s' % (datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'])
+            item = QListWidgetItem(item_str)
             self.fileListWidget.addItem(item)
 
-    def importDirImages(self, dirpath):
-        if not self.mayContinue() or not dirpath:
-            return
-
-        self.lastOpenDir = dirpath
-        self.dirname = dirpath
-        self.filePath = None
-        self.fileListWidget.clear()
-        self.mImgList = find_files(dirpath, '*.nc')
-        self.mImgList = SortFNamesByDateTime(self.mImgList)
-        for imgPath in self.mImgList:
-            item = QListWidgetItem(imgPath)
-            self.fileListWidget.addItem(item)
+    # def importDirImages(self, dirpath):
+    #     if not self.mayContinue() or not dirpath:
+    #         return
+    #
+    #     self.lastOpenDir = dirpath
+    #     self.dirname = dirpath
+    #     self.filePath = None
+    #     self.fileListWidget.clear()
+    #     self.mImgList = find_files(dirpath, '*.nc')
+    #     self.mImgList = SortFNamesByDateTime(self.mImgList)
+    #     for imgPath in self.mImgList:
+    #         item = QListWidgetItem(imgPath)
+    #         self.fileListWidget.addItem(item)
 
     def openPrevImg(self, _value=False):
         if not self.mayContinue():
@@ -1647,23 +1715,26 @@ def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
 
 
-def read(filename, default=None):
-    try:
-        if filename.lower().endswith('.nc'):
-            if default is None:
-                helper = TrackingBasemapHelperClass(filename, args)
-                helper.initiate(resolution='f')
-            else:
-                helper = default
-                helper.SwitchSourceData(filename)
 
-            helper.FuseBasemapWithData()
-            return helper
-        else:
-            with open(filename, 'rb') as f:
-                return f.read()
-    except:
-        raise Exception()
+
+
+# def read(filename, default=None):
+#     try:
+#         if filename.lower().endswith('.nc'):
+#             if default is None:
+#                 helper = TrackingBasemapHelperClass(filename, args)
+#                 helper.initiate(resolution='f')
+#             else:
+#                 helper = default
+#                 helper.SwitchSourceData(filename)
+#
+#             helper.FuseBasemapWithData()
+#             return helper
+#         else:
+#             with open(filename, 'rb') as f:
+#                 return f.read()
+#     except:
+#         raise Exception()
 
 
 def get_main_app(argv=[]):

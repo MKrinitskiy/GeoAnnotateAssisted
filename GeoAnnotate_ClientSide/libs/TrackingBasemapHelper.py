@@ -92,6 +92,7 @@ Channel | Band     | λcen   | λmin  | λmax  |
 class TrackingBasemapHelperClass:
     def __init__(self, app_args):
         self.app_args = app_args
+        self.srvSourceDataList = None
         self.dataSourceServersideUUID = ''
         self.dataSourceServersideDatetime = datetime.datetime(1970,1,1,0,0,0)
         self.zoom = 1.0
@@ -116,26 +117,6 @@ class TrackingBasemapHelperClass:
                                      'lat': 'latitudes',
                                      'lon': 'longitudes'}
         self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
-
-
-    ### TODO: remove if no errors
-    # @classmethod
-    # def t_brightness_calculate(self, data, channelname = 'ch9'):
-    #     if channelname == 'ch5_ch9':
-    #         ch5_temp = TrackingBasemapHelperClass.t_brightness_calculate(data['ch5'], 'ch5')
-    #         ch9_temp = TrackingBasemapHelperClass.t_brightness_calculate(data['ch9'], 'ch9')
-    #         return ch5_temp-ch9_temp
-    #     else:
-    #         data.mask[data == data.min()] = True
-    #         A = A_values[channelname]
-    #         B = B_values[channelname]
-    #         nu = nu_central[channelname]
-    #         c = C2 * nu
-    #         e = nu * nu * nu * C1
-    #         logval = np.log(1. + e / data)
-    #         bt = (c / logval - B) / A
-    #         return bt
-    #     return 0
 
 
     def ComputeCenterAndRange(self):
@@ -218,33 +199,64 @@ class TrackingBasemapHelperClass:
                                  dt_start: datetime.datetime = datetime.datetime(1970, 1, 1, 0, 0, 0),
                                  dt_end: datetime.datetime = datetime.datetime(2101, 1, 1, 0, 0, 0)):
 
-        url = 'http://%s:1999/exec?command=listData&webapi_client_id=%s&dt_start=%s&dt_end=%s' % (self.remotehost,
-                                                                                                  self.webapi_client_id,
-                                                                                                  datetime.datetime.strftime(dt_start, '%Y-%m-%d-%H-%M-%S'),
-                                                                                                  datetime.datetime.strftime(dt_end, '%Y-%m-%d-%H-%M-%S'))
+        url1 = 'http://%s:1999/exec?command=listData&webapi_client_id=%s&dt_start=%s&dt_end=%s' % (self.remotehost,
+                                                                                                   self.webapi_client_id,
+                                                                                                   datetime.datetime.strftime(dt_start, '%Y-%m-%d-%H-%M-%S'),
+                                                                                                   datetime.datetime.strftime(dt_end, '%Y-%m-%d-%H-%M-%S'))
+        url2 = 'http://%s:1999/datalist?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+
         try:
-            req = requests.get(url, stream=True)
+            req1 = requests.get(url1, stream=True)
             if self.app_args.http_logging:
-                logging.info(url)
+                logging.info(url1)
         except Exception as ex:
             print('Request failed. Please check the connection.')
             ReportException('./logs/errors.log', ex)
             raise RequestFailedException()
 
 
-        print(req.headers)
-        ctype = req.headers['Content-Type']
+        print(req1.headers)
+        ctype = req1.headers['Content-Type']
         m = re.match(r'.+charset=(.+)', ctype)
         enc = 'utf-8'
         if m is not None:
             enc = m.groups()[0]
             print('encoding detected: %s' % enc)
-        print(req.status_code)
+        print(req1.status_code)
 
-        for line in streamlines_gen(req):
+        for line in streamlines_gen(req1):
             print(line)
             if line == 'READY':
-                print('Got READY response. Serverside client-server comm.agent is ready.')
+                print('Got READY response. Serverside source data list is ready. Requesting it.')
+                try:
+                    req = requests.get(url2)
+                    if self.app_args.http_logging:
+                        logging.info(url2)
+                except Exception as ex:
+                    print('Request failed. Please check the connection.')
+                    ReportException('./logs/errors.log', ex)
+                    raise RequestFailedException()
+
+                print(req.status_code)
+                print(req.headers)
+                enc = 'utf-8'
+                if m is not None:
+                    enc = m.groups()[0]
+                    print('encoding detected: %s' % enc)
+
+                req_json = req.content.decode(enc)
+
+                rec_dict = ast.literal_eval(req_json)
+                rec_dict = [rec_dict[k] for k in rec_dict.keys()]
+                def convert_datetime(dct):
+                    dct['dt'] = datetime.datetime.strptime(dct['dt_str'], '%Y-%m-%d-%H-%M-%S')
+                    return dct
+                rec_dict = [convert_datetime(d) for d in rec_dict]
+                rec_dict.sort(key = lambda s: s['dt'])
+                src_data_df = pd.DataFrame(rec_dict)
+
+                self.srvSourceDataList = src_data_df
+
 
 
     def RequestPreparedImages(self, resolution = 'c', calculateLatLonLimits=True):
@@ -260,6 +272,8 @@ class TrackingBasemapHelperClass:
 
         print(req.status_code)
         print(req.headers)
+
+        self.srvUUID2DataDesc = req.content
 
         rec_dict = None
         with BytesIO() as bytesf:
@@ -333,11 +347,10 @@ class TrackingBasemapHelperClass:
 
 
 
-    def SwitchSourceData(self, filename):
-        self.dataSourceFile = filename
-        # self.ReadSourceData()
+    def SwitchSourceData(self, uuid):
+        self.dataSourceUUID = uuid
 
-        url1 = 'http://%s:1999/exec?command=SwitchSourceData&src_fname=%s&webapi_client_id=%s' % (self.remotehost, os.path.basename(self.dataSourceFile), self.webapi_client_id)
+        url1 = 'http://%s:1999/exec?command=SwitchSourceData&uuid=%s&webapi_client_id=%s' % (self.remotehost, uuid, self.webapi_client_id)
         url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
         try:
             req1 = requests.get(url1, stream=True)
@@ -384,6 +397,59 @@ class TrackingBasemapHelperClass:
                     self.deflate_recieved_dict(rec_dict)
                 else:
                     raise Exception('Generated images transfer failed.')
+
+
+    # def SwitchSourceData(self, filename):
+    #     self.dataSourceFile = filename
+    #     # self.ReadSourceData()
+    #
+    #     url1 = 'http://%s:1999/exec?command=SwitchSourceData&src_fname=%s&webapi_client_id=%s' % (self.remotehost, os.path.basename(self.dataSourceFile), self.webapi_client_id)
+    #     url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+    #     try:
+    #         req1 = requests.get(url1, stream=True)
+    #         if self.app_args.http_logging:
+    #             logging.info(url1)
+    #     except Exception as ex:
+    #         print('Request failed. Please check the connection.')
+    #         ReportException('./logs/errors.log', ex)
+    #         raise RequestFailedException()
+    #
+    #     print(req1.headers)
+    #     ctype = req1.headers['Content-Type']
+    #     m = re.match(r'.+charset=(.+)', ctype)
+    #     enc = 'utf-8'
+    #     if m is not None:
+    #         enc = m.groups()[0]
+    #         print('encoding detected: %s' % enc)
+    #     print(req1.status_code)
+    #
+    #     for line in streamlines_gen(req1):
+    #         print(line)
+    #         if line == 'READY':
+    #             print('got READY response')
+    #             print('requesting image')
+    #
+    #             try:
+    #                 req2 = requests.get(url2)
+    #                 if self.app_args.http_logging:
+    #                     logging.info(url2)
+    #             except Exception as ex:
+    #                 print('Request failed. Please check the connection.')
+    #                 ReportException('./logs/errors.log', ex)
+    #                 raise RequestFailedException()
+    #             print(req2.status_code)
+    #             print(req2.headers)
+    #
+    #             rec_dict = None
+    #             with BytesIO() as bytesf:
+    #                 bytesf.write(req2.content)
+    #                 bytesf.seek(0)
+    #                 rec_dict = pickle.load(bytesf)
+    #
+    #             if rec_dict is not None:
+    #                 self.deflate_recieved_dict(rec_dict)
+    #             else:
+    #                 raise Exception('Generated images transfer failed.')
 
 
 

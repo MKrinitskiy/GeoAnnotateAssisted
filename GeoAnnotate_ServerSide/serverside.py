@@ -51,12 +51,12 @@ def main():
     return response
 
 
-def MakeTrackingBasemapHelper_progress(webapi_client_id = ''):
+def MakeTrackingBasemapHelper_progress(webapi_client_id = '', resolution = 'c'):
     if webapi_client_id == '':
         raise Exception('client ID not specified!')
 
     step = 0
-    total_steps = 1
+    total_steps = 2
 
     while True:
         step_description = ''
@@ -68,6 +68,8 @@ def MakeTrackingBasemapHelper_progress(webapi_client_id = ''):
 
         if step == 0:
             app.bmhelpers[webapi_client_id] = TrackingBasemapHelperClass()
+        elif step == 1:
+            app.bmhelpers[webapi_client_id].createBasemapObj(resolution=resolution)
             yield 'READY\n'
             print('READY')
             break
@@ -82,7 +84,7 @@ def ListAvailableDataSnapshots_progress(dt_start: datetime.datetime = datetime.d
         raise Exception('client ID not specified!')
 
     step = 0
-    total_steps = 1
+    total_steps = 2
 
     while True:
         step_description = ''
@@ -93,9 +95,10 @@ def ListAvailableDataSnapshots_progress(dt_start: datetime.datetime = datetime.d
         print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
 
         if step == 0:
-            # app.bmhelpers[webapi_client_id] = TrackingBasemapHelperClass()
             sourceDataManager = app.bmhelpers[webapi_client_id].sourceDataManager
+            filtered_data_shape = sourceDataManager.ListAvailableData(dt_start, dt_end)
 
+        elif step == 1:
             yield 'READY\n'
             print('READY')
             break
@@ -202,7 +205,7 @@ def SwitchSourceData_progress(curr_fname, webapi_client_id = ''):
         raise Exception('there is no basemap helper object for this client yet!!')
 
     x = 0
-    total_steps = 6
+    total_steps = 4
     while True:
         step_description = ''
         if x == 0:
@@ -294,7 +297,13 @@ def exec():
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
 
-        return Response(MakeTrackingBasemapHelper_progress(webapi_client_id=webapi_client_id), mimetype='text/stream')
+        try:
+            resolution = request.args['resolution']
+        except:
+            resolution = 'c'
+
+        return Response(MakeTrackingBasemapHelper_progress(webapi_client_id=webapi_client_id, resolution=resolution),
+                        mimetype='text/stream')
 
     elif command == 'listData':
         try:
@@ -308,28 +317,19 @@ def exec():
 
         try:
             dt_start = request.args['dt_start']
+            dt_start = datetime.datetime.strptime(dt_start, '%Y-%m-%d-%H-%M-%S')
         except Exception as ex:
             dt_start = datetime.datetime(1900, 1, 1, 0, 0, 0)
 
         try:
             dt_end = request.args['dt_end']
+            dt_end = datetime.datetime.strptime(dt_end, '%Y-%m-%d-%H-%M-%S')
         except Exception as ex:
             dt_end = datetime.datetime(2101, 1, 1, 23, 59, 59)
-
-        # sourceDataManager = app.bmhelpers[webapi_client_id].sourceDataManager
 
         return Response(ListAvailableDataSnapshots_progress(dt_start, dt_end,
                                                             webapi_client_id=webapi_client_id),
                         mimetype='text/stream')
-
-        available_data_snapshots = sourceDataManager.ListAvailableData(dt_start, dt_end)
-        if available_data_snapshots == 0:
-            response = make_response('There is no data in this date/time range')
-            response.headers['ErrorDesc'] = 'DataListEmpty'
-            return response
-        else:
-            response = jsonify(sourceDataManager.uids2DataDesc)
-            return response
 
     elif command == 'processDataSnapshot':
         try:
@@ -401,14 +401,16 @@ def exec():
             response.headers['ErrorDesc'] = 'UnknownError'
             return response
 
+
+
     elif command == 'SwitchSourceData':
         try:
-            arg_src_fname = request.args['src_fname']
+            arg_src_uuid = request.args['uuid']
         except Exception as ex:
             print(ex)
             ReportException('./logs/app.log', ex)
-            response = make_response('source file was not specified')
-            response.headers['ErrorDesc'] = 'FileNotFound'
+            response = make_response('source data uuid was not specified')
+            response.headers['ErrorDesc'] = 'UUIDnotRecognized'
             return response
 
         try:
@@ -420,17 +422,9 @@ def exec():
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
 
-        # curr_fname = os.path.join(os.getcwd(), 'src_data', arg_src_fname)
-        datetime_fname_stamp = os.path.splitext(os.path.basename(arg_src_fname))[0][-14:]
-        sat_name = os.path.splitext(os.path.basename(arg_src_fname))[0][-33:-29]
-        found_fnames = [f for f in find_files('./src_data/', '*%s*%s.nc' % (sat_name, datetime_fname_stamp))]
-        if len(found_fnames) == 0:
-            ReportError('./logs/app.err.log', webapi_client_id, 'FileNotFound', arg_src_fname)
-            response = make_response('Unable to find file %s' % arg_src_fname)
-            response.headers['ErrorDesc'] = 'FileNotFound'
-            return response
-        else:
-            curr_fname = found_fnames[0]
+        sourceDataManager = app.bmhelpers[webapi_client_id].sourceDataManager
+        data_desc_dict = sourceDataManager.uids2DataDesc[arg_src_uuid]
+        curr_fname = data_desc_dict['full_fname']
 
         if not DoesPathExistAndIsFile(curr_fname):
             response = make_response('Unable to find file %s' % curr_fname)
@@ -438,6 +432,45 @@ def exec():
             return response
         else:
             return Response(SwitchSourceData_progress(curr_fname, webapi_client_id=webapi_client_id), mimetype='text/stream')
+
+
+    # elif command == 'SwitchSourceData':
+    #     try:
+    #         arg_src_fname = request.args['src_fname']
+    #     except Exception as ex:
+    #         print(ex)
+    #         ReportException('./logs/app.log', ex)
+    #         response = make_response('source file was not specified')
+    #         response.headers['ErrorDesc'] = 'FileNotFound'
+    #         return response
+    #
+    #     try:
+    #         webapi_client_id = request.args['webapi_client_id']
+    #     except Exception as ex:
+    #         print(ex)
+    #         ReportException('./logs/app.log', ex)
+    #         response = make_response('client webapi ID was not specified')
+    #         response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
+    #         return response
+    #
+    #     # curr_fname = os.path.join(os.getcwd(), 'src_data', arg_src_fname)
+    #     datetime_fname_stamp = os.path.splitext(os.path.basename(arg_src_fname))[0][-14:]
+    #     sat_name = os.path.splitext(os.path.basename(arg_src_fname))[0][-33:-29]
+    #     found_fnames = [f for f in find_files('./src_data/', '*%s*%s.nc' % (sat_name, datetime_fname_stamp))]
+    #     if len(found_fnames) == 0:
+    #         ReportError('./logs/app.err.log', webapi_client_id, 'FileNotFound', arg_src_fname)
+    #         response = make_response('Unable to find file %s' % arg_src_fname)
+    #         response.headers['ErrorDesc'] = 'FileNotFound'
+    #         return response
+    #     else:
+    #         curr_fname = found_fnames[0]
+    #
+    #     if not DoesPathExistAndIsFile(curr_fname):
+    #         response = make_response('Unable to find file %s' % curr_fname)
+    #         response.headers['ErrorDesc'] = 'FileNotFound'
+    #         return response
+    #     else:
+    #         return Response(SwitchSourceData_progress(curr_fname, webapi_client_id=webapi_client_id), mimetype='text/stream')
 
     elif command == 'PredictMCScurrentData':
         try:
@@ -461,6 +494,37 @@ def exec():
             return response
         else:
             return Response(PredictMCS_progress(app.bmhelpers[webapi_client_id].dataSourceFile, webapi_client_id=webapi_client_id), mimetype='text/stream')
+
+
+
+@app.route('/datalist', methods=['GET'])
+def data_list():
+    try:
+        try:
+            webapi_client_id = request.args['webapi_client_id']
+        except Exception as ex:
+            print(ex)
+            ReportException('./logs/app.log', ex)
+            response = make_response('client webapi ID was not specified')
+            response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
+            return response
+
+        sourceDataManager = app.bmhelpers[webapi_client_id].sourceDataManager
+
+        if len(sourceDataManager.uids2DataDesc) == 0:
+            response = make_response('There is no data in this date/time range')
+            response.headers['ErrorDesc'] = 'DataListEmpty'
+            return response
+        else:
+            response = jsonify(sourceDataManager.uids2DataDesc)
+            return response
+    except Exception as ex:
+        print(ex)
+        ReportException('./logs/app.log', ex)
+        response = make_response('Unable to return source data snapshots list')
+        response.headers['ErrorDesc'] = 'SourceDataSnaphotsListGenerating'
+        return response
+
 
 
 @app.route('/images', methods=['GET'])
