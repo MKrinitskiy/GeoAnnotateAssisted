@@ -17,5 +17,4 @@ venv.bak/
 /docker_service/
 *.log
 /.cache/
-/src_data/2012-06-10/
-/src_data/2019-05-01/
+/src_data/*
