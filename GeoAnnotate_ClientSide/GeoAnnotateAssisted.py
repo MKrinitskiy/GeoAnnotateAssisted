@@ -20,10 +20,12 @@ from PyQt5.QtWidgets import *
 
 from libs import *
 from libs.parse_args import parse_args
+from common import *
+import asyncio
 
 
 
-__appname__ = 'labelImg'
+__appname__ = 'GeoAnnotate assisted'
 
 args = sys.argv[1:]
 args = parse_args(args)
@@ -31,32 +33,8 @@ logging.basicConfig(filename='./app.log', level=logging.INFO, format='%(asctime)
 logging.info('Started AI-assisted GeoAnnotate client-side app')
 logging.info('args: %s' % sys.argv[1:])
 
-# Utility functions and classes.
-def have_qstring():
-    '''p3/qt5 get rid of QString wrapper as py3 has native unicode str type'''
-    return not (sys.version_info.major >= 3 or QT_VERSION_STR.startswith('5.'))
 
-
-class WindowMixin(object):
-
-    def menu(self, title, actions=None):
-        menu = self.menuBar().addMenu(title)
-        if actions:
-            addActions(menu, actions)
-        return menu
-
-    def toolbar(self, title, actions=None):
-        toolbar = ToolBar(title)
-        toolbar.setObjectName(u'%sToolBar' % title)
-        # toolbar.setOrientation(Qt.Vertical)
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        if actions:
-            addActions(toolbar, actions)
-        self.addToolBar(Qt.LeftToolBarArea, toolbar)
-        return toolbar
-
-
-class MainWindow(QMainWindow, WindowMixin):
+class MainWindow(QMainWindow):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
 
     # def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None, defaultSaveDir=None):
@@ -81,7 +59,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.labelHist = []
         self.lastOpenDir = None
 
-        self.curr_dt = datetime.now()
+        self.curr_dt = datetime.datetime.now()
 
         # Whether we need to save or not.
         self.dirty = False
@@ -157,7 +135,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
 
-        #region MK - track list widget
+        #region MKrinitskiy - track list widget
         self.trackListWidget = QTreeWidget()
         self.trackListWidget.setColumnCount(2)
         self.trackListWidget.setHeaderLabels(['name', 'uid', 'date,time'])
@@ -170,12 +148,12 @@ class MainWindow(QMainWindow, WindowMixin):
         self.trackdock.setObjectName(u'Tracks')
         self.trackListWidget.itemChanged.connect(self.trackItemChanged)
         self.trackdock.setWidget(trackListContainer)
-        #endregion MK - track list widget
         self.addDockWidget(Qt.RightDockWidgetArea, self.trackdock)
+        #endregion MKrinitskiy - track list widget
 
 
 
-        #region Tzutalin 20160906 : Add file list and dock to move faster
+        #region File List widget
         self.fileListWidget = QListWidget()
         self.fileListWidget.itemDoubleClicked.connect(self.fileitemDoubleClicked)
         filelistLayout = QVBoxLayout()
@@ -188,6 +166,19 @@ class MainWindow(QMainWindow, WindowMixin):
         self.filedock.setWidget(fileListContainer)
         #endregion
         self.addDockWidget(Qt.RightDockWidgetArea, self.filedock)
+        #endregion File List widget
+
+
+        # # region MKrinitskiy - log widget
+        # self.logsDock = QDockWidget(u'log', self)
+        # self.logsDock.setObjectName(u'log')
+        # logTextBox = QPlainTextEditLogger(self)
+        # logging.getLogger().addHandler(logTextBox)
+        # logging.getLogger().setLevel(logging.INFO)
+        # self.logsDock.setWidget(logTextBox.widget)
+        # self.addDockWidget(Qt.BottomDockWidgetArea, self.logsDock)
+        # # endregion MKrinitskiy - track list widget
+
 
         self.currently_opened_source_file = None
 
@@ -445,7 +436,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         ## Fix the compatible issue for qt4 and qt5. Convert the QStringList to python list
         if self.settings.get(SETTING_RECENT_FILES):
-            if have_qstring():
+            if not (sys.version_info.major >= 3 or QT_VERSION_STR.startswith('5.')):
                 recentFileQStringList = self.settings.get(SETTING_RECENT_FILES)
                 self.recentFiles = [ustr(i) for i in recentFileQStringList]
             else:
@@ -520,24 +511,34 @@ class MainWindow(QMainWindow, WindowMixin):
             self.openDirDialog(dirpath=self.filePath)
 
 
+
+    def menu(self, title, actions=None):
+        menu = self.menuBar().addMenu(title)
+        if actions:
+            addActions(menu, actions)
+        return menu
+
+
+    def toolbar(self, title, actions=None):
+        toolbar = ToolBar(title)
+        toolbar.setObjectName(u'%sToolBar' % title)
+        # toolbar.setOrientation(Qt.Vertical)
+        toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        if actions:
+            addActions(toolbar, actions)
+        self.addToolBar(Qt.LeftToolBarArea, toolbar)
+        return toolbar
+
+
     @property
     def basemaphelper(self):
         if self._basemaphelper:
             return self._basemaphelper
         else:
-            self._basemaphelper = self.create_basemaphelper()
+            self._basemaphelper = create_basemaphelper(args)
             return self._basemaphelper
 
-    def create_basemaphelper(self):
-        try:
-            helper = TrackingBasemapHelperClass(args)
-            helper.initiate()
-        except:
-            helper = None
-            ReportException('./logs/error.log', None)
-            error_dialog = QErrorMessage()
-            error_dialog.showMessage('Unable to create client-server communication agent.\nThe app functionality will be limited.')
-        return helper
+
 
     def noShapes(self):
         return not self.itemsToShapes
@@ -644,7 +645,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 curr_track = Track(args)
                 self.addTrack(curr_track)
                 curr_track.append_new_label(self.canvas.selectedShape)
-                label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
+                label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
                 self.TracksToTrackItems[curr_track].addChild(label_item)
 
                 if curr_track.database_insert_track_info(self.tracks_db_fname):
@@ -668,7 +669,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.TracksToTrackItems[curr_track] = track_item
 
         for label in curr_track.labels:
-            label_item = HashableQTreeWidgetItem(['', label['uid'], datetime.strftime(label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
+            label_item = HashableQTreeWidgetItem(['', label['uid'], datetime.datetime.strftime(label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
             # label_item.setBackground(generateColorByText(curr_track.uid))
             track_item.addChild(label_item)
         track_item.setExpanded(True)
@@ -696,7 +697,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     selected_track.append_new_label(self.canvas.selectedShape)
                     selected_track.database_update_track_info(self.tracks_db_fname)
 
-                    label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
+                    label_item = HashableQTreeWidgetItem(['', self.canvas.selectedShape.label.uid, datetime.datetime.strftime(self.canvas.selectedShape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
                     self.TracksToTrackItems[selected_track].addChild(label_item)
                 self.trackListWidget.resizeColumnToContents(0)
                 self.trackListWidget.resizeColumnToContents(1)
@@ -824,7 +825,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def addLabel(self, shape):
         shape.paintLabel = self.paintLabelsOption.isChecked()
-        item = HashableQTreeWidgetItem(self.labelList, [shape.label.name, shape.label.uid, datetime.strftime(shape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
+        item = HashableQTreeWidgetItem(self.labelList, [shape.label.name, shape.label.uid, datetime.datetime.strftime(shape.label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
         self.itemsToShapes[item] = shape
         self.shapesToItems[shape] = item
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
@@ -925,7 +926,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     self.TracksToTrackItems[curr_track] = track_item
 
                     for label in curr_track.labels:
-                        label_item = HashableQTreeWidgetItem(['', label.uid, datetime.strftime(label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
+                        label_item = HashableQTreeWidgetItem(['', label.uid, datetime.datetime.strftime(label.dt, DATETIME_HUMAN_READABLE_FORMAT_STRING)])
                         label_item.setRowBackground(generateColorByText(curr_track.uid))
                         track_item.addChild(label_item)
                     track_item.setExpanded(True)
@@ -1311,13 +1312,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
         image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
 
-        # if image.isNull():
-        #     self.errorMessage(u'Error opening file',
-        #                       u"<p>Make sure <i>%s</i> is a valid image file." % unicodeFilePath)
-        #     self.status("Error reading %s" % unicodeFilePath)
-        #     return False
-
-        self.status("Loaded data for %s with serverside-uuid: %s" % (datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%s'), uuid))
+        self.status("Loaded data for %s with serverside-uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%s'), uuid))
         self.image = image
         # self.filePath = unicodeFilePath
         self.canvas.loadPixmap(QPixmap.fromImage(image))
@@ -1341,7 +1336,7 @@ class MainWindow(QMainWindow, WindowMixin):
             if labels_cnn_predicted is not None:
                 self.loadPredictedLabels(labels_cnn_predicted)
 
-        self.setWindowTitle(__appname__ + ' ' + "%s :uuid: %s" % (datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%s'), uuid))
+        self.setWindowTitle(__appname__ + ' ' + "%s :uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%s'), uuid))
 
         # Default : select last item if there is at least one item
         if self.labelList.topLevelItemCount():
@@ -1513,7 +1508,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def ListServersideDataSnapshots(self, _value=False):
-        self.basemaphelper.RequestDataSnapshotsList(datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 12, 31, 23, 59, 59))
+        self.basemaphelper.RequestDataSnapshotsList(datetime.datetime(2019, 1, 1, 0, 0, 0), datetime.datetime(2019, 12, 31, 23, 59, 59))
 
         self.importServersideDataSnapshotsList(self.basemaphelper.srvSourceDataList)
 
@@ -1522,7 +1517,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.fileListWidget.clear()
         # srvSourceDataList should be Pandas.DataFrame
         for idx,row in srvSourceDataList.iterrows():
-            item_str = '%s :uuid:%s' % (datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'])
+            item_str = '%s :uuid:%s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'])
             item = QListWidgetItem(item_str)
             self.fileListWidget.addItem(item)
 
@@ -1711,30 +1706,14 @@ class MainWindow(QMainWindow, WindowMixin):
         for shape in self.canvas.shapes:
             shape.paintLabel = paintLabelsOptionChecked
 
+
+
+
+
 def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
 
 
-
-
-
-# def read(filename, default=None):
-#     try:
-#         if filename.lower().endswith('.nc'):
-#             if default is None:
-#                 helper = TrackingBasemapHelperClass(filename, args)
-#                 helper.initiate(resolution='f')
-#             else:
-#                 helper = default
-#                 helper.SwitchSourceData(filename)
-#
-#             helper.FuseBasemapWithData()
-#             return helper
-#         else:
-#             with open(filename, 'rb') as f:
-#                 return f.read()
-#     except:
-#         raise Exception()
 
 
 def get_main_app(argv=[]):

@@ -18,6 +18,8 @@ import uuid
 import threading
 from .colormaps import *
 from .SourceDataManagers import *
+from hashlib import sha512
+import json
 
 
 
@@ -266,23 +268,15 @@ class TrackingBasemapHelperClass(object):
             self.df_pickled_basemaps_list['FileNotPresent'] = [(not DoesPathExistAndIsFile(s)) for s in self.df_pickled_basemaps_list.bm_fname]
             self.df_pickled_basemaps_list = self.df_pickled_basemaps_list.drop(self.df_pickled_basemaps_list[self.df_pickled_basemaps_list.FileNotPresent].index)
         else:
-            columns = [('llcrnrlon', float),
-                       ('llcrnrlat', float),
-                       ('urcrnrlon', float),
-                       ('urcrnrlat', float),
-                       ('resolution', str),
+            columns = [('bm_args_sha512', str),
                        ('bm_fname', str)]
             self.df_pickled_basemaps_list = pd.DataFrame({k: pd.Series(dtype=t) for k, t in columns})
 
 
-    def loadPickledBasemapObj(self, resolution, eps=1.e-4):
+    def loadPickledBasemapObj(self, basemap_args_sha512: str):
         self.listAvailablePickledBasemapObjects()
 
-        df_filtered = self.df_pickled_basemaps_list[(np.abs(self.df_pickled_basemaps_list.llcrnrlon-self.llcrnrlon)<=eps) &
-                                                    (np.abs(self.df_pickled_basemaps_list.llcrnrlat-self.llcrnrlat)<=eps) &
-                                                    (np.abs(self.df_pickled_basemaps_list.urcrnrlon-self.urcrnrlon)<=eps) &
-                                                    (np.abs(self.df_pickled_basemaps_list.urcrnrlat-self.urcrnrlat)<=eps) &
-                                                    (self.df_pickled_basemaps_list.resolution == resolution)]
+        df_filtered = self.df_pickled_basemaps_list[self.df_pickled_basemaps_list['bm_args_sha512'] == basemap_args_sha512]
         if df_filtered.shape[0] > 0:
             try:
                 bm = pickle.load(open(df_filtered.bm_fname.iloc[0], 'rb'))
@@ -296,30 +290,26 @@ class TrackingBasemapHelperClass(object):
 
 
 
-    def savePickledBasemapObj(self, resolution):
+    def savePickledBasemapObj(self, bm_args_sha512: str):
         fname = './cache/' + str(uuid.uuid4()) + '.pickle'
         pickle.dump(self.bm, open(fname, 'wb'), -1)
-        self.df_pickled_basemaps_list = self.df_pickled_basemaps_list.append({'llcrnrlon': self.llcrnrlon,
-                                                                              'llcrnrlat': self.llcrnrlat,
-                                                                              'urcrnrlon': self.urcrnrlon,
-                                                                              'urcrnrlat': self.urcrnrlat,
-                                                                              'resolution': resolution,
+        self.df_pickled_basemaps_list = self.df_pickled_basemaps_list.append({'bm_args_sha512': sha512(bm_args_sha512.encode()).hexdigest(),
                                                                               'bm_fname': fname},
                                                                              ignore_index=True)
         self.df_pickled_basemaps_list.to_csv(basemaps_pickled_list_csvfile, sep=';', index=False)
 
 
 
-    def createBasemapObj(self, resolution='c'):
-        self.bm = self.loadPickledBasemapObj(resolution)
+    def createBasemapObj(self, basemap_args_json: str = None):
+        try:
+            self.bm = self.loadPickledBasemapObj(sha512(basemap_args_json.encode()).hexdigest())
+        except:
+            ReportException('./logs/error.log', None)
+            self.bm = None
+
         if self.bm == None:
-            self.bm = Basemap(resolution=resolution, projection='cyl',
-                              llcrnrlon = self.llcrnrlon,
-                              llcrnrlat = self.llcrnrlat,
-                              urcrnrlon = self.urcrnrlon,
-                              urcrnrlat = self.urcrnrlat,
-                              area_thresh=20000)
-            self.savePickledBasemapObj(resolution)
+            self.bm = Basemap(**(json.loads(basemap_args_json)))
+            self.savePickledBasemapObj(basemap_args_json)
 
 
 
@@ -376,6 +366,11 @@ class TrackingBasemapHelperClass(object):
 
 
 
+
+    def ChangeProjection(self, new_proj_args_json):
+        self.createBasemapObj(new_proj_args_json)
+
+
     def SetNewLatLonLimits(self, llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat):
         self.cLat = (llcrnrlat + urcrnrlat) * 0.5
         self.cLon = (llcrnrlon + urcrnrlon) * 0.5
@@ -402,11 +397,6 @@ class TrackingBasemapHelperClass(object):
             newChannel = 'ch5_ch9'
         elif self.dataToPlot == 'ch5_ch9':
             newChannel = 'ch9'
-        #     newChannel = 'lat'
-        # elif self.dataToPlot == 'lat':
-        #     newChannel = 'lon'
-        # elif self.dataToPlot == 'lon':
-        #     newChannel = 'ch9'
 
         if perform:
             self.dataToPlot = newChannel

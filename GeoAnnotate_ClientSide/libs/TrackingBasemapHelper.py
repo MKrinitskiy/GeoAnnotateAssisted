@@ -16,8 +16,11 @@ from io import BytesIO
 import pandas as pd
 from libs.ga_defs import *
 import binascii
-from libs.srvMCSlabel import srvMCSlabel
+from common.srvMCSlabel import srvMCSlabel
 import ast
+from common.BasemapFrame import *
+from libs.settings import Settings
+from types import SimpleNamespace
 
 
 
@@ -168,10 +171,12 @@ class TrackingBasemapHelperClass:
 
 
 
-    def initiate(self, resolution = 'c', calculateLatLonLimits=True):
-        url = 'http://%s:1999/exec?command=createbmhelper&webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+    def initiate(self, basemap_args: SimpleNamespace = None):
+        url = 'http://%s:1999/exec?command=createbmhelper&webapi_client_id=%s' % (self.remotehost,
+                                                                                  self.webapi_client_id)
         try:
-            req = requests.get(url, stream=True)
+            req = requests.get(url, json=json.dumps(basemap_args.__dict__))
+            # req = requests.get(url, stream=True)
             if self.app_args.http_logging:
                 logging.info(url)
         except Exception as ex:
@@ -533,3 +538,13 @@ class TrackingBasemapHelperClass:
 
 
 
+def create_basemaphelper(args, settings: Settings):
+    try:
+        helper = TrackingBasemapHelperClass(args)
+        helper.initiate(basemap_args=settings.basemap_args)
+    except:
+        helper = None
+        EnsureDirectoryExists('./logs/')
+        ReportException('./logs/error.log', None)
+        logging.warning('Unable to create client-server communication agent. The app functionality will be limited.')
+    return helper

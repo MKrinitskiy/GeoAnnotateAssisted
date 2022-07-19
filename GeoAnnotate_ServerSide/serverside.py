@@ -33,7 +33,7 @@ if 'gpu' in args.__dict__.keys():
 app = FlaskExtended(__name__)
 app.config['SECRET_KEY'] = binascii.hexlify(os.urandom(24))
 
-logging.basicConfig(filename='./app.log', level=logging.INFO, format='%(asctime)s %(message)s')
+logging.basicConfig(filename='./logs/app.log', level=logging.INFO, format='%(asctime)s %(message)s')
 logging.info('Started AI-assisted GeoAnnotate server-side app')
 logging.info('args: %s' % sys.argv[1:])
 
@@ -51,7 +51,7 @@ def main():
     return response
 
 
-def MakeTrackingBasemapHelper_progress(webapi_client_id = '', resolution = 'c'):
+def MakeTrackingBasemapHelper_progress(webapi_client_id = '', basemap_args_json=None):
     if webapi_client_id == '':
         raise Exception('client ID not specified!')
 
@@ -69,7 +69,7 @@ def MakeTrackingBasemapHelper_progress(webapi_client_id = '', resolution = 'c'):
         if step == 0:
             app.bmhelpers[webapi_client_id] = TrackingBasemapHelperClass()
         elif step == 1:
-            app.bmhelpers[webapi_client_id].createBasemapObj(resolution=resolution)
+            app.bmhelpers[webapi_client_id].createBasemapObj(basemap_args_json)
             yield 'READY\n'
             print('READY')
             break
@@ -198,6 +198,7 @@ def SetNewLatLonLimits_progress(llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, reso
 
 
 
+
 def SwitchSourceData_progress(curr_fname, webapi_client_id = ''):
     if webapi_client_id == '':
         raise Exception('client ID not specified!')
@@ -237,6 +238,7 @@ def SwitchSourceData_progress(curr_fname, webapi_client_id = ''):
             break
 
         x = x + 1
+
 
 
 
@@ -292,17 +294,26 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
 
-        try:
-            resolution = request.args['resolution']
-        except:
-            resolution = 'c'
+        # try:
+        #     resolution = request.args['resolution']
+        # except:
+        #     resolution = 'c'
 
-        return Response(MakeTrackingBasemapHelper_progress(webapi_client_id=webapi_client_id, resolution=resolution),
+        try:
+            basemap_args_json = request.json
+        except:
+            ReportException('./logs/error.log', None)
+            response = make_response('unable to process expected json containing basemap projection args')
+            response.headers['ErrorDesc'] = 'BasemapArgsNotRecognized'
+            return response
+
+        return Response(MakeTrackingBasemapHelper_progress(webapi_client_id=webapi_client_id,
+                                                           basemap_args_json=basemap_args_json),
                         mimetype='text/stream')
 
     elif command == 'listData':
@@ -310,7 +321,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -336,7 +347,7 @@ def exec():
             arg_srcdata_uuid = request.args['src_data_uuid']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('source data uuid was not specified')
             response.headers['ErrorDesc'] = 'DataNotFound'
             return response
@@ -345,7 +356,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -396,7 +407,7 @@ def exec():
             return Response(SetNewLatLonLimits_progress(llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, resolution, webapi_client_id=webapi_client_id), mimetype='text/stream')
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('SetNewLatLonLimits: UnknownError')
             response.headers['ErrorDesc'] = 'UnknownError'
             return response
@@ -408,7 +419,7 @@ def exec():
             arg_src_uuid = request.args['uuid']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('source data uuid was not specified')
             response.headers['ErrorDesc'] = 'UUIDnotRecognized'
             return response
@@ -417,7 +428,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -439,7 +450,7 @@ def exec():
     #         arg_src_fname = request.args['src_fname']
     #     except Exception as ex:
     #         print(ex)
-    #         ReportException('./logs/app.log', ex)
+    #         ReportException('./logs/error.log', ex)
     #         response = make_response('source file was not specified')
     #         response.headers['ErrorDesc'] = 'FileNotFound'
     #         return response
@@ -448,7 +459,7 @@ def exec():
     #         webapi_client_id = request.args['webapi_client_id']
     #     except Exception as ex:
     #         print(ex)
-    #         ReportException('./logs/app.log', ex)
+    #         ReportException('./logs/error.log', ex)
     #         response = make_response('client webapi ID was not specified')
     #         response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
     #         return response
@@ -477,7 +488,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -504,7 +515,7 @@ def data_list():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -520,7 +531,7 @@ def data_list():
             return response
     except Exception as ex:
         print(ex)
-        ReportException('./logs/app.log', ex)
+        ReportException('./logs/error.log', ex)
         response = make_response('Unable to return source data snapshots list')
         response.headers['ErrorDesc'] = 'SourceDataSnaphotsListGenerating'
         return response
@@ -534,7 +545,7 @@ def image():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -561,7 +572,7 @@ def image():
         return response
     except Exception as ex:
         print(ex)
-        ReportException('./logs/app.log', ex)
+        ReportException('./logs/error.log', ex)
         response = make_response('Unable to generate basemap image')
         response.headers['ErrorDesc'] = 'BasemapImageGenerating'
         return response
@@ -575,7 +586,7 @@ def predictions():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -604,7 +615,7 @@ def imdone():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/app.log', ex)
+            ReportException('./logs/error.log', ex)
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -616,7 +627,7 @@ def imdone():
         return response
     except Exception as ex:
         print(ex)
-        ReportException('./logs/app.log', ex)
+        ReportException('./logs/error.log', ex)
         response = make_response('SetNewLatLonLimits: UnknownError')
         response.headers['ErrorDesc'] = 'UnknownError'
         return response

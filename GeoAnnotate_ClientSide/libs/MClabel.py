@@ -3,7 +3,7 @@ import os
 from .DatabaseOps import DatabaseOps
 import pandas as pd
 import numpy as np
-from libs.srvMClabel import srvMClabel
+from common.srvMClabel import srvMClabel
 from .SQLite_queries import SQLite_Queries
 
 
