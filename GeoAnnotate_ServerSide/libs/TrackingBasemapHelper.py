@@ -1,6 +1,4 @@
 import matplotlib
-# matplotlib.use('Qt5Agg')
-# matplotlib.use('TkAgg')
 matplotlib.use('ps')
 from .scaling import *
 
@@ -20,6 +18,9 @@ from .colormaps import *
 from .SourceDataManagers import *
 from hashlib import sha512
 import json
+from tempfile import NamedTemporaryFile
+from libs.u_interpolate import interpolation_weights
+from libs.sat_service_defs import infer_ncfile_info_from_fname
 
 
 
@@ -91,17 +92,16 @@ nu_central = {'ch4': 2547.771 ,
 
 
 class TrackingBasemapHelperClass(object):
-    def __init__(self, dataSourceFile = None):
-        self.dataSourceFile = dataSourceFile
+    def __init__(self):
         self.zoom = 1.0
-        self.cLat = None
-        self.cLon = None
-        self.LathalfRange = None
-        self.LonHalfRange = None
-        self.llcrnrlon = None
-        self.llcrnrlat = None
-        self.urcrnrlon = None
-        self.urcrnrlat = None
+        # self.cLat = None
+        # self.cLon = None
+        # self.LathalfRange = None
+        # self.LonHalfRange = None
+        # self.llcrnrlon = None
+        # self.llcrnrlat = None
+        # self.urcrnrlon = None
+        # self.urcrnrlat = None
         self.BasemapLayerImage = None
         self.CVimageCombined = None
         self.dataToPlot = 'ch9'
@@ -120,6 +120,9 @@ class TrackingBasemapHelperClass(object):
         self.channelVmax = [norm_constants.ch9_vmax, norm_constants.ch5_vmax, norm_constants.btd_vmax]
 
         self.sourceDataManager = SourceDataManager_METEOSAT()
+        self.latlons_manager = LatLonDataManager_METEOSAT()
+        self.curr_sat_label = 'None'
+        self.dpi = 300
 
 
     # def create_ch5_cmap(self):
@@ -182,38 +185,34 @@ class TrackingBasemapHelperClass(object):
 
 
     # @classmethod
-    def t_brightness_calculate(self, data, channelname = 'ch9'):
-        # if channelname == 'ch5_ch9':
-        #     ch5_temp = self.t_brightness_calculate(data['ch5'], 'ch5')
-        #     ch9_temp = self.t_brightness_calculate(data['ch9'], 'ch9')
-        #     return ch5_temp-ch9_temp
-        # else:
-        data.mask[data == data.min()] = True
-        A = A_values[channelname]
-        B = B_values[channelname]
-        nu = nu_central[channelname]
-        c = C2 * nu
-        e = nu * nu * nu * C1
-        logval = np.log(1. + e / data)
-        bt = (c / logval - B) / A
-        return bt
-        # return 0
 
 
     def ReadSourceData(self):
         ds1 = Dataset(self.dataSourceFile, 'r')
-
         self.lats = ds1.variables['lat'][:]
         self.lons = ds1.variables['lon'][:]
+
+        sat_label, dt_str = infer_ncfile_info_from_fname(self.dataSourceFile)
+
+        if sat_label != self.curr_sat_label:
+            interpolation_inds, interpolation_wghts, interpolation_shape = interpolation_weights(self.lons.data,
+                                                                                                 self.lats.data,
+                                                                                                 self.projection_grid['lons_proj'],
+                                                                                                 self.projection_grid['lats_proj'])
+            self.interpolation_constants = {'interpolation_inds': interpolation_inds,
+                                            'interpolation_wghts': interpolation_wghts,
+                                            'interpolation_shape': interpolation_shape}
+        self.curr_sat_label = sat_label
+        self.curr_dt_str = dt_str
 
         for dataname in self.channelNames:
             if dataname == 'ch5_ch9':
                 ch5_data = ds1.variables['ch5'][:]
                 ch5_data.mask = self.lats.mask
-                ch5_data = self.t_brightness_calculate(ch5_data, 'ch5')
+                ch5_data = t_brightness_calculate(ch5_data, 'ch5')
                 ch9_data = ds1.variables['ch9'][:]
                 ch9_data.mask = self.lats.mask
-                ch9_data = self.t_brightness_calculate(ch9_data, 'ch9')
+                ch9_data = t_brightness_calculate(ch9_data, 'ch9')
 
                 btd = ch5_data - ch9_data
                 btd.mask = self.lats.mask
@@ -222,7 +221,7 @@ class TrackingBasemapHelperClass(object):
             else:
                 curr_data = ds1.variables[dataname][:]
                 curr_data.mask = self.lats.mask
-                self.__dict__['data_%s' % dataname] = self.t_brightness_calculate(curr_data, dataname)
+                self.__dict__['data_%s' % dataname] = t_brightness_calculate(curr_data, dataname)
 
 
 
@@ -231,6 +230,7 @@ class TrackingBasemapHelperClass(object):
             self.lats[self.lats < 0.0] = self.lats[self.lats < 0.0] + 360.
         while self.lons.min() < 0.0:
             self.lons[self.lons < 0.0] = self.lons[self.lons < 0.0] + 360.
+
 
         # dataname = 'lat'
         # self.__dict__['data_%s' % dataname] = self.lats
@@ -313,20 +313,46 @@ class TrackingBasemapHelperClass(object):
 
 
 
+        fig = plt.figure(figsize=(4, 4), dpi=300)
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+        _ = self.bm.drawcoastlines()
+        _ = self.bm.fillcontinents()
+        _ = self.bm.plot(55, 55, 'bo', latlon=True)
+
+        with NamedTemporaryFile(suffix='.png', delete=False) as f:
+            fig.savefig(f.name, bbox_inches='tight', pad_inches=0, dpi=300)
+            img = cv2.imread(f.name)
+            h, w, c = img.shape
+        lons_proj, lats_proj, x_proj, y_proj = self.bm.makegrid(*(img.shape[:-1]), returnxy=True)
+        self.projection_grid = {'lons_proj': lons_proj,
+                                'lats_proj': lats_proj,
+                                'x_proj': x_proj,
+                                'y_proj': y_proj}
+
+
+
     def PlotBasemapBackground(self):
-        self.BasemapFigure = plt.figure(figsize=(8, 8), dpi=300)
-        # self.bm.drawcounties()
+        self.BasemapFigure = plt.figure(figsize=(4,4), dpi=self.dpi)
+        ax = plt.Axes(self.BasemapFigure, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        self.BasemapFigure.add_axes(ax)
         self.bm.drawcoastlines()
-        # self.bm.drawrivers(linewidth=0.5, color='blue')
         m = self.bm.drawmeridians([self.lons.min() + i * (self.lons.max() - self.lons.min()) / 5. for i in range(6)])
         p = self.bm.drawparallels([self.lats.min() + i * (self.lats.max() - self.lats.min()) / 5. for i in range(6)])
         plt.axis("off")
 
-        buf = io.BytesIO()
-        self.BasemapFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
-        plt.close()
-        buf.seek(0)
-        self.BasemapLayerImage = np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8))
+        # buf = io.BytesIO()
+        # self.BasemapFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
+        # plt.close()
+        # buf.seek(0)
+        with NamedTemporaryFile(suffix='.png', delete=False) as f:
+            self.BasemapFigure.savefig(f.name, bbox_inches='tight', pad_inches=0, dpi=self.dpi)
+            img = cv2.imread(f.name)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            h, w, c = img.shape
+        self.BasemapLayerImage = np.copy(img)
 
 
     def PlotDataLayer(self, debug=False):
@@ -338,31 +364,34 @@ class TrackingBasemapHelperClass(object):
             if (counter > 1) & (debug):
                 self.__dict__['DataLayerImage_%s' % dataname] = debug_cache
             else:
-                DataFigure = plt.figure(figsize=(8, 8), dpi=300)
+                DataFigure = plt.figure(figsize=(4,4), dpi=self.dpi)
                 data = self.__dict__['data_%s' % dataname]
-                # vmin = data[data.mask==False].min()
-                # vmax = data[data.mask==False].max()
-                im = self.bm.pcolormesh(self.lons.data, self.lats.data, data,
-                                        latlon=True, alpha=1.0,
-                                        vmin=vmin, vmax=vmax, cmap=cmap)
+                ax = plt.Axes(DataFigure, [0., 0., 1., 1.])
+                ax.set_axis_off()
+                DataFigure.add_axes(ax)
+
+                im = self.bm.pcolor(self.lons.data, self.lats.data, data,
+                                    latlon=True, alpha=1.0,
+                                    vmin=vmin, vmax=vmax, cmap=cmap)
                 plt.axis("off")
-                # plt.colorbar(im)
-                buf = io.BytesIO()
-                DataFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
-                plt.close()
-                buf.seek(0)
-                self.__dict__['DataLayerImage_%s'%dataname] = np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8))
-                debug_cache = np.copy(self.__dict__['DataLayerImage_%s'%dataname])
+
+                # with NamedTemporaryFile(suffix='.png', delete=False) as f:
+                with io.BytesIO() as buf:
+                    # self.BasemapFigure.savefig(f.name, bbox_inches='tight', pad_inches=0, dpi=self.dpi)
+                    self.BasemapFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
+                    buf.seek(0)
+                    # img = cv2.imread(f.name)
+
+                    img = cv2.imdecode(np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8)), cv2.IMREAD_COLOR)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    h, w, c = img.shape
+                self.__dict__['DataLayerImage_%s' % dataname] = np.copy(img)
+
+                debug_cache = np.copy(self.__dict__['DataLayerImage_%s' % dataname])
 
 
     def FuseBasemapWithData(self, alpha = 0.3, beta = 0.7):
-        BasemapImageCV = cv2.imdecode(self.BasemapLayerImage, cv2.IMREAD_COLOR)
-        DataLayerImageCV = cv2.imdecode(self.__dict__['DataLayerImage_%s' % self.dataToPlot], cv2.IMREAD_COLOR)
-        self.CVimageCombined = cv2.addWeighted(BasemapImageCV, alpha, DataLayerImageCV, beta, 0.0)
-        # self.CVimageCombined = DataLayerImageCV
-        # DEBUG
-        # DataLayerImageCV = cv2.imdecode(self.__dict__['DataLayerImage_%s' % self.dataToPlot], cv2.IMREAD_COLOR)
-        # self.CVimageCombined = DataLayerImageCV
+        self.CVimageCombined = cv2.addWeighted(self.BasemapLayerImage, alpha, self.__dict__['DataLayerImage_%s' % self.dataToPlot], beta, 0.0)
 
 
 
@@ -371,22 +400,11 @@ class TrackingBasemapHelperClass(object):
         self.createBasemapObj(new_proj_args_json)
 
 
-    # def SetNewLatLonLimits(self, llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat):
-    #     self.cLat = (llcrnrlat + urcrnrlat) * 0.5
-    #     self.cLon = (llcrnrlon + urcrnrlon) * 0.5
-    #     self.LathalfRange = (urcrnrlat - llcrnrlat) * 0.5
-    #     self.LonHalfRange = (urcrnrlon - llcrnrlon) * 0.5
-    #     self.llcrnrlon = self.cLon - self.LonHalfRange * 1.05
-    #     self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
-    #     self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
-    #     self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
-
-
 
     def SwitchSourceData(self, filename):
         self.dataSourceFile = filename
         self.CVimageCombined = None
-        self.ReadSourceData(calculateLatLonLimits=False)
+
 
 
     def cycleChannel(self, perform = True):
@@ -424,3 +442,20 @@ class TrackingBasemapHelperClass(object):
             latlon_pt = self.bm(xypt['xpt'], xypt['ypt'], inverse=True)
             latlon_pt = {'lonpt': latlon_pt[0], 'latpt': latlon_pt[1]}
             return latlon_pt
+
+
+def t_brightness_calculate(data, channelname = 'ch9'):
+    # if channelname == 'ch5_ch9':
+    #     ch5_temp = self.t_brightness_calculate(data['ch5'], 'ch5')
+    #     ch9_temp = self.t_brightness_calculate(data['ch9'], 'ch9')
+    #     return ch5_temp-ch9_temp
+    # else:
+    data.mask[data == data.min()] = True
+    A = A_values[channelname]
+    B = B_values[channelname]
+    nu = nu_central[channelname]
+    c = C2 * nu
+    e = nu * nu * nu * C1
+    logval = np.log(1. + e / data)
+    bt = (c / logval - B) / A
+    return bt

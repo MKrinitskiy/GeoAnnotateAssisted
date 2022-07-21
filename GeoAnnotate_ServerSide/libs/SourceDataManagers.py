@@ -51,3 +51,13 @@ class SourceDataManager_METEOSAT:
         self.uids2datetime = dict([(s['uuid'],s['dt']) for idx,s in fnames_df_filtered.iterrows()])
 
         return fnames_df_filtered.shape[0]
+
+
+
+class LatLonDataManager_METEOSAT:
+    def __init__(self):
+        with open('./.cache/latlons_METEOSAT.pkl', 'rb') as f:
+            self.latlons = pickle.load(f)
+
+    def __call__(self, MSGlabel):
+        return self.latlons[MSGlabel]['lons'], self.latlons[MSGlabel]['lats']

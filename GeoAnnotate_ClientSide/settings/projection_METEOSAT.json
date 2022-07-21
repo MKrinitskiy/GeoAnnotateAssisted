@@ -1,1 +1,1 @@
-{"projection": "cyl", "llcrnrlat": 35.0, "urcrnrlat": 75.0, "llcrnrlon": 7.0, "urcrnrlon": 100.0}
+{"width": 5500000, "height": 4500000, "rsphere": [6378137.0, 6356752.3142], "resolution": "l", "area_thresh": 1000.0, "projection": "lcc", "lat_1": 45.0, "lat_2": 65.0, "lat_0": 60.0, "lon_0": 35.0}
