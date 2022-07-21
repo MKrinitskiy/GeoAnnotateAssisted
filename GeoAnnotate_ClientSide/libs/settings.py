@@ -5,7 +5,7 @@ import sys
 class Settings(object):
     def __init__(self, home):
         self.data = {}
-        self.path = os.path.join(home, '.GeoAnnotateSettings.pkl')
+        self.path = os.path.join(home, './settings/.GeoAnnotateSettings.pkl')
 
     def __setitem__(self, key, value):
         self.data[key] = value

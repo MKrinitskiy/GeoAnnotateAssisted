@@ -171,11 +171,11 @@ class TrackingBasemapHelperClass:
 
 
 
-    def initiate(self, basemap_args: SimpleNamespace = None):
+    def initiate(self, basemap_args: dict = None):
         url = 'http://%s:1999/exec?command=createbmhelper&webapi_client_id=%s' % (self.remotehost,
                                                                                   self.webapi_client_id)
         try:
-            req = requests.get(url, json=json.dumps(basemap_args.__dict__))
+            req = requests.get(url, json=json.dumps(basemap_args))
             # req = requests.get(url, stream=True)
             if self.app_args.http_logging:
                 logging.info(url)
@@ -215,7 +215,7 @@ class TrackingBasemapHelperClass:
             if self.app_args.http_logging:
                 logging.info(url1)
         except Exception as ex:
-            print('Request failed. Please check the connection.')
+            print('Request failed. You may want to check your connection.')
             ReportException('./logs/errors.log', ex)
             raise RequestFailedException()
 
@@ -264,6 +264,7 @@ class TrackingBasemapHelperClass:
 
 
 
+
     def RequestPreparedImages(self, resolution = 'c', calculateLatLonLimits=True):
         url = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
         try:
@@ -290,6 +291,7 @@ class TrackingBasemapHelperClass:
             self.deflate_recieved_dict(rec_dict)
         else:
             raise Exception('Generated images transfer failed.')
+
 
 
     def FuseBasemapWithData(self, alpha = 0.3, beta = 0.7):
@@ -538,10 +540,10 @@ class TrackingBasemapHelperClass:
 
 
 
-def create_basemaphelper(args, settings: Settings):
+def create_basemaphelper(args, basemap_args: dict):
     try:
         helper = TrackingBasemapHelperClass(args)
-        helper.initiate(basemap_args=settings.basemap_args)
+        helper.initiate(basemap_args=basemap_args)
     except:
         helper = None
         EnsureDirectoryExists('./logs/')

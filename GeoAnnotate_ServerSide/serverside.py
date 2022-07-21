@@ -19,6 +19,7 @@ import json
 import sys
 import collections
 from libs.parse_args import parse_args
+import ast
 
 
 args = sys.argv[1:]
@@ -61,7 +62,9 @@ def MakeTrackingBasemapHelper_progress(webapi_client_id = '', basemap_args_json=
     while True:
         step_description = ''
         if step == 0:
-            step_description = 'TrackingBasemapHelperClass'
+            step_description = 'Creating server-side comm. agent'
+        elif step == 1:
+            step_description = 'Creating server-side basemap renderer'
 
         yield 'step %d / %d : %s\n' % (step + 1, total_steps, step_description)
         print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
@@ -84,21 +87,20 @@ def ListAvailableDataSnapshots_progress(dt_start: datetime.datetime = datetime.d
         raise Exception('client ID not specified!')
 
     step = 0
-    total_steps = 2
+    total_steps = 1
 
     while True:
         step_description = ''
         if step == 0:
-            step_description = 'TrackingBasemapHelperClass'
+            step_description = 'Listing availabe data for datetime interval from %s till %s' % (datetime.datetime.strftime(dt_start, "%Y-%m-%dT%H:%M:%S"),
+                                                                                                datetime.datetime.strftime(dt_end, "%Y-%m-%dT%H:%M:%S"))
 
         yield 'step %d / %d : %s\n' % (step + 1, total_steps, step_description)
         print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
 
         if step == 0:
             sourceDataManager = app.bmhelpers[webapi_client_id].sourceDataManager
-            filtered_data_shape = sourceDataManager.ListAvailableData(dt_start, dt_end)
-
-        elif step == 1:
+            _ = sourceDataManager.ListAvailableData(dt_start, dt_end)
             yield 'READY\n'
             print('READY')
             break
@@ -299,11 +301,6 @@ def exec():
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
 
-        # try:
-        #     resolution = request.args['resolution']
-        # except:
-        #     resolution = 'c'
-
         try:
             basemap_args_json = request.json
         except:
@@ -396,21 +393,21 @@ def exec():
 
 
 
-    elif command == 'SetNewLatLonLimits':
-        try:
-            llcrnrlon = np.float(request.args['llcrnrlon'])
-            llcrnrlat = np.float(request.args['llcrnrlat'])
-            urcrnrlon = np.float(request.args['urcrnrlon'])
-            urcrnrlat = np.float(request.args['urcrnrlat'])
-            resolution = request.args['resolution']
-            webapi_client_id = request.args['webapi_client_id']
-            return Response(SetNewLatLonLimits_progress(llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, resolution, webapi_client_id=webapi_client_id), mimetype='text/stream')
-        except Exception as ex:
-            print(ex)
-            ReportException('./logs/error.log', ex)
-            response = make_response('SetNewLatLonLimits: UnknownError')
-            response.headers['ErrorDesc'] = 'UnknownError'
-            return response
+    # elif command == 'SetNewLatLonLimits':
+    #     try:
+    #         llcrnrlon = np.float(request.args['llcrnrlon'])
+    #         llcrnrlat = np.float(request.args['llcrnrlat'])
+    #         urcrnrlon = np.float(request.args['urcrnrlon'])
+    #         urcrnrlat = np.float(request.args['urcrnrlat'])
+    #         resolution = request.args['resolution']
+    #         webapi_client_id = request.args['webapi_client_id']
+    #         return Response(SetNewLatLonLimits_progress(llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, resolution, webapi_client_id=webapi_client_id), mimetype='text/stream')
+    #     except Exception as ex:
+    #         print(ex)
+    #         ReportException('./logs/error.log', ex)
+    #         response = make_response('SetNewLatLonLimits: UnknownError')
+    #         response.headers['ErrorDesc'] = 'UnknownError'
+    #         return response
 
 
 
@@ -538,6 +535,40 @@ def data_list():
 
 
 
+@app.route('/coordinates', methods=['GET'])
+def coordinates():
+    try:
+        webapi_client_id = request.args['webapi_client_id']
+    except Exception as ex:
+        print(ex)
+        ReportException('./logs/error.log', ex)
+        response = make_response('client webapi ID was not specified')
+        response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
+        return response
+
+    try:
+        xypt_json = request.json
+        xypt = ast.literal_eval(xypt_json)
+    except:
+        ReportException('./logs/error.log', None)
+        response = make_response('unable to process expected json containing xy point coordinates')
+        response.headers['ErrorDesc'] = 'XYpointNotRecognized'
+        return response
+
+    ret_dict = {}
+    try:
+        ret = app.bmhelpers[webapi_client_id].getLatLonCoordinates(xypt)
+    except:
+        ReportException('./logs/error.log', None)
+        response = make_response('unable to determine lat-lon coordinates of the point position')
+        response.headers['ErrorDesc'] = 'LatLonCoordinatesCouldNotDetemined'
+        return response
+
+    response = jsonify(ret)
+    return response
+
+
+
 @app.route('/images', methods=['GET'])
 def image():
     try:
@@ -553,6 +584,7 @@ def image():
         dict1 = {'CVimageCombined': np.copy(app.bmhelpers[webapi_client_id].CVimageCombined)}
         for ch in channels_list:
             dict1['DataLayerImage_%s' % ch] = np.copy(app.bmhelpers[webapi_client_id].__dict__['DataLayerImage_%s' % ch])
+        dict1['lats'] = np.copy(app.bmhelpers[webapi_client_id].__dict__['DataLayerImage_%s' % ch])
         dict1['BasemapLayerImage'] = np.copy(app.bmhelpers[webapi_client_id].__dict__['BasemapLayerImage'])
         dict1['llcrnrlon'] = app.bmhelpers[webapi_client_id].llcrnrlon
         dict1['llcrnrlat'] = app.bmhelpers[webapi_client_id].llcrnrlat
@@ -565,6 +597,7 @@ def image():
         dict1['dataToPlot'] = app.bmhelpers[webapi_client_id].dataToPlot
 
         tmp_fname = './cache/webapi_cache/basemap-plot-%s.pickle' % binascii.hexlify(os.urandom(5)).decode('ascii')
+        EnsureDirectoryExists(os.path.dirname(tmp_fname))
         with open(tmp_fname, 'wb') as f:
             pickle.dump(dict1, f, pickle.HIGHEST_PROTOCOL)
         response = make_response(send_file(tmp_fname, mimetype='application/octet-stream'))

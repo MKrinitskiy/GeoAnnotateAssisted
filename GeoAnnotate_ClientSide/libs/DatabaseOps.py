@@ -13,7 +13,7 @@ class DatabaseOps():
                 res = c.fetchall()
             return True
         except Exception as ex:
-            ReportException('./errors.log', ex)
+            ReportException('./logs/errors.log', ex)
             return False
 
 
@@ -28,7 +28,7 @@ class DatabaseOps():
                 conn.commit()
             return True
         except Exception as ex:
-            ReportException('./errors.log', ex)
+            ReportException('./logs/errors.log', ex)
             print("Tracks database was not created.")
             return False
 
@@ -47,7 +47,7 @@ class DatabaseOps():
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
-            ReportException('./errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
             return None
 
 
@@ -64,7 +64,7 @@ class DatabaseOps():
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
-            ReportException('./errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
             return None
 
 
@@ -78,7 +78,7 @@ class DatabaseOps():
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
-            ReportException('./errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
             return None
 
 
@@ -92,7 +92,7 @@ class DatabaseOps():
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
-            ReportException('./errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
             return None
 
 
@@ -115,7 +115,7 @@ class DatabaseOps():
                 conn.commit()
                 return rows_affected if rows_affected>0 else True
         except Exception as ex:
-            ReportException('./errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
             # raise ex
             return False
         return
@@ -133,7 +133,7 @@ class DatabaseOps():
                 conn.commit()
                 return rows_affected if rows_affected>0 else True
         except Exception as ex:
-            ReportException('./errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
             return False
 
 
@@ -148,7 +148,7 @@ class DatabaseOps():
                 conn.commit()
                 return True
         except Exception as ex:
-            ReportException('./errors.log', ex, sqlite_query = sqlite_query)
+            ReportException('./logs/errors.log', ex, sqlite_query = sqlite_query)
             return False
 
 
@@ -164,7 +164,7 @@ class DatabaseOps():
                 conn.commit()
                 return rows_affected if rows_affected > 0 else True
         except Exception as ex:
-            ReportException('./errors.log', ex)
+            ReportException('./logs/errors.log', ex)
             return False
 
 
@@ -185,5 +185,5 @@ class DatabaseOps():
                 conn.commit()
                 return rows_affected if rows_affected > 0 else True
         except Exception as ex:
-            ReportException('./errors.log', ex, sqlite_query = sqlite_query)
+            ReportException('./logs/errors.log', ex, sqlite_query = sqlite_query)
             return False

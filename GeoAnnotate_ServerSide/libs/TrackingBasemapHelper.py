@@ -200,7 +200,7 @@ class TrackingBasemapHelperClass(object):
         # return 0
 
 
-    def ReadSourceData(self, calculateLatLonLimits = True):
+    def ReadSourceData(self):
         ds1 = Dataset(self.dataSourceFile, 'r')
 
         self.lats = ds1.variables['lat'][:]
@@ -238,26 +238,26 @@ class TrackingBasemapHelperClass(object):
         # self.__dict__['data_%s' % dataname] = self.lons
 
 
-        self.lats_re = np.reshape(self.lats, (-1,))
-        self.lons_re = np.reshape(self.lons, (-1,))
+        # self.lats_re = np.reshape(self.lats, (-1,))
+        # self.lons_re = np.reshape(self.lons, (-1,))
 
-        if calculateLatLonLimits:
-            self.llcrnrlon = self.lons_re.min()
-            self.llcrnrlat = self.lats_re.min()
-            self.urcrnrlon = self.lons_re.max()
-            self.urcrnrlat = self.lats_re.max()
-            self.ComputeCenterAndRange()
+        # if calculateLatLonLimits:
+        #     self.llcrnrlon = self.lons_re.min()
+        #     self.llcrnrlat = self.lats_re.min()
+        #     self.urcrnrlon = self.lons_re.max()
+        #     self.urcrnrlat = self.lats_re.max()
+        #     self.ComputeCenterAndRange()
 
 
-    def ComputeCenterAndRange(self):
-        self.cLat = (self.urcrnrlat + self.llcrnrlat) * 0.5
-        self.LathalfRange = (self.urcrnrlat - self.llcrnrlat) * 0.5
-        self.cLon = (self.urcrnrlon + self.llcrnrlon) * 0.5
-        self.LonHalfRange = (self.lons_re.max() - self.lons_re.min()) * 0.5
-        self.llcrnrlon = self.cLon - self.LonHalfRange * 1.05
-        self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
-        self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
-        self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
+    # def ComputeCenterAndRange(self):
+    #     self.cLat = (self.urcrnrlat + self.llcrnrlat) * 0.5
+    #     self.LathalfRange = (self.urcrnrlat - self.llcrnrlat) * 0.5
+    #     self.cLon = (self.urcrnrlon + self.llcrnrlon) * 0.5
+    #     self.LonHalfRange = (self.lons_re.max() - self.lons_re.min()) * 0.5
+    #     self.llcrnrlon = self.cLon - self.LonHalfRange * 1.05
+    #     self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
+    #     self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
+    #     self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
 
 
     def listAvailablePickledBasemapObjects(self):
@@ -318,8 +318,8 @@ class TrackingBasemapHelperClass(object):
         # self.bm.drawcounties()
         self.bm.drawcoastlines()
         # self.bm.drawrivers(linewidth=0.5, color='blue')
-        m = self.bm.drawmeridians([self.lons_re.min() + i * (self.lons_re.max() - self.lons_re.min()) / 5. for i in range(6)])
-        p = self.bm.drawparallels([self.lats_re.min() + i * (self.lats_re.max() - self.lats_re.min()) / 5. for i in range(6)])
+        m = self.bm.drawmeridians([self.lons.min() + i * (self.lons.max() - self.lons.min()) / 5. for i in range(6)])
+        p = self.bm.drawparallels([self.lats.min() + i * (self.lats.max() - self.lats.min()) / 5. for i in range(6)])
         plt.axis("off")
 
         buf = io.BytesIO()
@@ -371,15 +371,15 @@ class TrackingBasemapHelperClass(object):
         self.createBasemapObj(new_proj_args_json)
 
 
-    def SetNewLatLonLimits(self, llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat):
-        self.cLat = (llcrnrlat + urcrnrlat) * 0.5
-        self.cLon = (llcrnrlon + urcrnrlon) * 0.5
-        self.LathalfRange = (urcrnrlat - llcrnrlat) * 0.5
-        self.LonHalfRange = (urcrnrlon - llcrnrlon) * 0.5
-        self.llcrnrlon = self.cLon - self.LonHalfRange * 1.05
-        self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
-        self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
-        self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
+    # def SetNewLatLonLimits(self, llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat):
+    #     self.cLat = (llcrnrlat + urcrnrlat) * 0.5
+    #     self.cLon = (llcrnrlon + urcrnrlon) * 0.5
+    #     self.LathalfRange = (urcrnrlat - llcrnrlat) * 0.5
+    #     self.LonHalfRange = (urcrnrlon - llcrnrlon) * 0.5
+    #     self.llcrnrlon = self.cLon - self.LonHalfRange * 1.05
+    #     self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
+    #     self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
+    #     self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
 
 
 
@@ -413,3 +413,14 @@ class TrackingBasemapHelperClass(object):
         dsqr = np.square(dlat) + np.square(dlon)
         nearest_value = currData[np.unravel_index(np.argmin(dsqr), dsqr.shape)]
         return '%f' % nearest_value
+
+
+    def getLatLonCoordinates(self, xypt):
+        if type(xypt) is list:
+            latlon_pts = [self.bm(pt['xpt'], pt['ypt'], inverse=True) for pt in xypt]
+            latlon_pts = [{'lonpt': latlonpt[0], 'latpt': latlonpt[1]} for latlonpt in latlon_pts]
+            return latlon_pts
+        else:
+            latlon_pt = self.bm(xypt['xpt'], xypt['ypt'], inverse=True)
+            latlon_pt = {'lonpt': latlon_pt[0], 'latpt': latlon_pt[1]}
+            return latlon_pt

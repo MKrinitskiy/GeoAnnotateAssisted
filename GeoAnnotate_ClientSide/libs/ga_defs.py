@@ -89,7 +89,7 @@ def EnsureDirectoryExists(pathStr):
         try:
             os.mkdir(pathStr)
         except Exception as ex:
-            err_fname = './errors.log'
+            err_fname = './logs/errors.log'
             exc_type, exc_value, exc_traceback = sys.exc_info()
             with open(err_fname, 'a') as errf:
                 traceback.print_tb(exc_traceback, limit=None, file=errf)

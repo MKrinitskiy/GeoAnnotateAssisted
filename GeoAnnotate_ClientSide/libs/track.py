@@ -47,7 +47,7 @@ class Track():
                 c.execute(self.queries_collection.DELETE_TRACK_QUERY_TEXT               % self.uid)
                 conn.commit()
         except Exception as ex:
-            ReportException('./errors.log', ex)
+            ReportException('./logs/errors.log', ex)
             print('Failed executing sqlite query')
 
     def database_insert_track_info(self, db_fname):
@@ -58,6 +58,6 @@ class Track():
                 DatabaseOps.insert_track_label_entry(db_fname, self, curr_label, self.queries_collection)
             return True
         except Exception as ex:
-            ReportException('./errors.log', ex)
+            ReportException('./logs/errors.log', ex)
             print('Failed executing sqlite query')
             return False

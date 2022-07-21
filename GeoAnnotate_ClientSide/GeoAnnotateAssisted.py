@@ -29,7 +29,8 @@ __appname__ = 'GeoAnnotate assisted'
 
 args = sys.argv[1:]
 args = parse_args(args)
-logging.basicConfig(filename='./app.log', level=logging.INFO, format='%(asctime)s %(message)s')
+EnsureDirectoryExists('./logs/')
+logging.basicConfig(filename='./logs/app.log', level=logging.INFO, format='%(asctime)s %(message)s')
 logging.info('Started AI-assisted GeoAnnotate client-side app')
 logging.info('args: %s' % sys.argv[1:])
 
@@ -50,6 +51,15 @@ class MainWindow(QMainWindow):
         # Load setting in the main thread
         self.settings = Settings(os.path.dirname(os.path.abspath(__file__)))
         self.settings.load()
+        try:
+            fn = args.proj_json_settings_fname
+            with open(fn, 'r') as f:
+                basemap_args_json = f.read()
+            self.basemap_args = ast.literal_eval(basemap_args_json)
+        except:
+            basemap_args_json = '{"projection": "cyl", "llcrnrlat": 35.0, "urcrnrlat": 75.0, "llcrnrlon": 7.0, "urcrnrlon": 100.0}'
+            self.basemap_args = ast.literal_eval(basemap_args_json)
+
 
         # self.defaultSaveDir = defaultSaveDir
 
@@ -535,7 +545,7 @@ class MainWindow(QMainWindow):
         if self._basemaphelper:
             return self._basemaphelper
         else:
-            self._basemaphelper = create_basemaphelper(args)
+            self._basemaphelper = create_basemaphelper(args, self.basemap_args)
             return self._basemaphelper
 
 
@@ -570,11 +580,11 @@ class MainWindow(QMainWindow):
 
     def setDirty(self):
         self.dirty = True
-        self.actions.save.setEnabled(True)
+        # self.actions.save.setEnabled(True)
 
     def setClean(self):
         self.dirty = False
-        self.actions.save.setEnabled(False)
+        # self.actions.save.setEnabled(False)
         self.actions.create.setEnabled(True)
 
     def toggleActions(self, value=True):
@@ -945,7 +955,7 @@ class MainWindow(QMainWindow):
                     DisplayWarning('OOPS', 'Something went wrong!', 'Some of labels were not written to the database.\nPlease refer to the "errors.log" file and make the developer know about the error.')
             return True
         except Exception as ex:
-            ReportException('./errors.log', ex)
+            ReportException('./logs/errors.log', ex)
             return False
 
 
@@ -1301,7 +1311,7 @@ class MainWindow(QMainWindow):
             self.basemaphelper.SwitchSourceData(uuid)
             self.basemaphelper.FuseBasemapWithData()
         except:
-            ReportException('./error.log', None)
+            ReportException('./logs/error.log', None)
             return False
 
         height, width, channel = self.basemaphelper.CVimageCombined.shape
