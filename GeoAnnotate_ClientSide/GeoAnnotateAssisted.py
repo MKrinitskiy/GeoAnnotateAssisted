@@ -1306,6 +1306,7 @@ class MainWindow(QMainWindow):
 
         self.currDataUUID = uuid
         self.curr_dt = curr_srcdata_row['dt']
+        self.filePath = curr_srcdata_row['full_fname']
 
         try:
             self.basemaphelper.SwitchSourceData(uuid)
@@ -1338,7 +1339,7 @@ class MainWindow(QMainWindow):
         self.actions.zoomHires.setEnabled(True)
         self.actions.switchDataChannel.setEnabled(True)
 
-        labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
+        labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, os.path.basename(self.filePath))
         self.loadLabels(labels_from_database)
 
         if self.settings.get(SETTING_DETECTION_USE_NEURAL_ASSISTANCE):

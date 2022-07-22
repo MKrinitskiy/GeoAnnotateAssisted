@@ -56,8 +56,12 @@ class SourceDataManager_METEOSAT:
 
 class LatLonDataManager_METEOSAT:
     def __init__(self):
-        with open('./.cache/latlons_METEOSAT.pkl', 'rb') as f:
-            self.latlons = pickle.load(f)
+        try:
+            with open('./.cache/latlons_METEOSAT.pkl', 'rb') as f:
+                self.latlons = pickle.load(f)
+        except:
+            ReportException('./logs/error.log', None)
+            self.latlons = None
 
     def __call__(self, MSGlabel):
         return self.latlons[MSGlabel]['lons'], self.latlons[MSGlabel]['lats']

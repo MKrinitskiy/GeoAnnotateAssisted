@@ -122,31 +122,33 @@ class TrackingBasemapHelperClass:
         self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
 
 
-    def ComputeCenterAndRange(self):
-        self.cLat = (self.urcrnrlat + self.llcrnrlat) * 0.5
-        self.LathalfRange = (self.urcrnrlat - self.llcrnrlat) * 0.5
-        self.cLon = (self.urcrnrlon + self.llcrnrlon) * 0.5
-        self.LonHalfRange = (self.lons_re.max() - self.lons_re.min()) * 0.5
-        self.llcrnrlon = self.cLon - self.LonHalfRange * 1.05
-        self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
-        self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
-        self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
+    # def ComputeCenterAndRange(self):
+    #     self.cLat = (self.urcrnrlat + self.llcrnrlat) * 0.5
+    #     self.LathalfRange = (self.urcrnrlat - self.llcrnrlat) * 0.5
+    #     self.cLon = (self.urcrnrlon + self.llcrnrlon) * 0.5
+    #     self.LonHalfRange = (self.lons_re.max() - self.lons_re.min()) * 0.5
+    #     self.llcrnrlon = self.cLon - self.LonHalfRange * 1.05
+    #     self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
+    #     self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
+    #     self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
 
 
     def deflate_recieved_dict(self, rec_dict):
         self.BasemapLayerImage = np.copy(rec_dict['BasemapLayerImage'])
-        self.CVimageCombined = np.copy(rec_dict['CVimageCombined'])
+        # self.CVimageCombined = np.copy(rec_dict['CVimageCombined'])
         for dataname in self.channelNames:
             self.__dict__['DataLayerImage_%s' % dataname] = np.copy(rec_dict['DataLayerImage_%s' % dataname])
-        self.llcrnrlon = rec_dict['llcrnrlon']
-        self.llcrnrlat = rec_dict['llcrnrlat']
-        self.urcrnrlon = rec_dict['urcrnrlon']
-        self.urcrnrlat = rec_dict['urcrnrlat']
-        self.cLat = rec_dict['cLat']
-        self.cLon = rec_dict['cLon']
-        self.LathalfRange = rec_dict['LathalfRange']
-        self.LonHalfRange = rec_dict['LonHalfRange']
+        # self.llcrnrlon = rec_dict['llcrnrlon']
+        # self.llcrnrlat = rec_dict['llcrnrlat']
+        # self.urcrnrlon = rec_dict['urcrnrlon']
+        # self.urcrnrlat = rec_dict['urcrnrlat']
+        # self.cLat = rec_dict['cLat']
+        # self.cLon = rec_dict['cLon']
+        # self.LathalfRange = rec_dict['LathalfRange']
+        # self.LonHalfRange = rec_dict['LonHalfRange']
         self.dataToPlot = rec_dict['dataToPlot']
+        self.projection_grid = {'lons_proj': rec_dict['lons_proj'],
+                                'lats_proj': rec_dict['lats_proj']}
 
 
 
@@ -295,8 +297,8 @@ class TrackingBasemapHelperClass:
 
 
     def FuseBasemapWithData(self, alpha = 0.3, beta = 0.7):
-        BasemapImageCV = cv2.imdecode(self.BasemapLayerImage, cv2.IMREAD_COLOR)
-        DataLayerImageCV = cv2.imdecode(self.__dict__['DataLayerImage_%s' % self.dataToPlot], cv2.IMREAD_COLOR)
+        BasemapImageCV = self.BasemapLayerImage
+        DataLayerImageCV = self.__dict__['DataLayerImage_%s' % self.dataToPlot]
         self.CVimageCombined = cv2.addWeighted(BasemapImageCV, alpha, DataLayerImageCV, beta, 0.0)
 
 

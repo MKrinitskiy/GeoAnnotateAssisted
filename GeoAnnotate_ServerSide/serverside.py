@@ -319,6 +319,7 @@ def image():
         # dict1['LonHalfRange'] = app.bmhelpers[webapi_client_id].LonHalfRange
         dict1['dataToPlot'] = app.bmhelpers[webapi_client_id].dataToPlot
 
+
         tmp_fname = './cache/webapi_cache/basemap-plot-%s.pickle' % binascii.hexlify(os.urandom(5)).decode('ascii')
         EnsureDirectoryExists(os.path.dirname(tmp_fname))
         with open(tmp_fname, 'wb') as f:

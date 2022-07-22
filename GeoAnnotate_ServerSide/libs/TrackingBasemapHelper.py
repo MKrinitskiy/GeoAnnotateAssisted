@@ -19,7 +19,7 @@ from .SourceDataManagers import *
 from hashlib import sha512
 import json
 from tempfile import NamedTemporaryFile
-from libs.u_interpolate import interpolation_weights
+from libs.u_interpolate import interpolation_weights, interpolate_data
 from libs.sat_service_defs import infer_ncfile_info_from_fname
 
 
@@ -124,69 +124,6 @@ class TrackingBasemapHelperClass(object):
         self.curr_sat_label = 'None'
         self.dpi = 300
 
-
-    # def create_ch5_cmap(self):
-    #     from matplotlib import cm
-    #     from matplotlib.colors import ListedColormap
-    #
-    #     ch5_vmin = 200.
-    #     ch5_vmax = 320.
-    #     ch5_vm1 = 237.
-    #     jet_cnt = int(512 * (ch5_vm1 - ch5_vmin) / (ch5_vmax - ch5_vmin))
-    #     gray_cnt = 512 - jet_cnt
-    #     jet = cm.get_cmap('jet', jet_cnt)
-    #     gray = cm.get_cmap('gray', gray_cnt)
-    #     jetcolors = jet(np.linspace(0, 1, jet_cnt))
-    #     graycolors = gray(np.linspace(0.4, 1, gray_cnt))
-    #     newcolors = np.concatenate([jetcolors[::-1], graycolors[::-1]], axis=0)
-    #     newcm = ListedColormap(newcolors)
-    #     return newcm
-
-
-
-    # def create_ch9_cmap(self, ch9):
-    #     from matplotlib import cm
-    #     from matplotlib.colors import ListedColormap
-    #
-    #     ch9_vmin = ch9.min()
-    #     ch9_vmax = ch9.max()
-    #     ch9_vm1 = 227.
-    #     jet_cnt = int(512 * (ch9_vm1 - ch9_vmin) / (ch9_vmax - ch9_vmin))
-    #     gray_cnt = 512 - jet_cnt
-    #     jet = cm.get_cmap('jet', jet_cnt)
-    #     gray = cm.get_cmap('gray', gray_cnt)
-    #     jetcolors = jet(np.linspace(0, 1, jet_cnt))
-    #     graycolors = gray(np.linspace(0.4, 1, gray_cnt))
-    #     newcolors = np.concatenate([jetcolors[::-1], graycolors], axis=0)
-    #     ch9_cm = ListedColormap(newcolors)
-    #     return ch9_cm
-
-
-
-    # def create_btd_cmap(self, btd):
-    #     from matplotlib import cm
-    #     from matplotlib.colors import ListedColormap
-    #
-    #     btd_vmin = btd.min()
-    #     btd_vmax = btd.max()
-    #     btd_vm1 = 0.
-    #     jet_cnt = int(512 * (btd_vmax - btd_vm1) / (btd_vmax - btd_vmin))
-    #     gray_cnt = 512 - jet_cnt
-    #     jet = cm.get_cmap('jet', jet_cnt)
-    #     gray = cm.get_cmap('gray', gray_cnt)
-    #     jetcolors = jet(np.linspace(0, 1, jet_cnt))
-    #     graycolors = gray(np.linspace(0.4, 1, gray_cnt))
-    #     newcolors = np.concatenate([graycolors[::-1], jetcolors], axis=0)
-    #     btd_cm = ListedColormap(newcolors)
-    #     return btd_cm
-
-
-
-
-
-    # @classmethod
-
-
     def ReadSourceData(self):
         ds1 = Dataset(self.dataSourceFile, 'r')
         self.lats = ds1.variables['lat'][:]
@@ -230,23 +167,6 @@ class TrackingBasemapHelperClass(object):
             self.lats[self.lats < 0.0] = self.lats[self.lats < 0.0] + 360.
         while self.lons.min() < 0.0:
             self.lons[self.lons < 0.0] = self.lons[self.lons < 0.0] + 360.
-
-
-        # dataname = 'lat'
-        # self.__dict__['data_%s' % dataname] = self.lats
-        # dataname = 'lon'
-        # self.__dict__['data_%s' % dataname] = self.lons
-
-
-        # self.lats_re = np.reshape(self.lats, (-1,))
-        # self.lons_re = np.reshape(self.lons, (-1,))
-
-        # if calculateLatLonLimits:
-        #     self.llcrnrlon = self.lons_re.min()
-        #     self.llcrnrlat = self.lats_re.min()
-        #     self.urcrnrlon = self.lons_re.max()
-        #     self.urcrnrlat = self.lats_re.max()
-        #     self.ComputeCenterAndRange()
 
 
     # def ComputeCenterAndRange(self):
@@ -311,8 +231,6 @@ class TrackingBasemapHelperClass(object):
             self.bm = Basemap(**(json.loads(basemap_args_json)))
             self.savePickledBasemapObj(basemap_args_json)
 
-
-
         fig = plt.figure(figsize=(4, 4), dpi=300)
         ax = plt.Axes(fig, [0., 0., 1., 1.])
         ax.set_axis_off()
@@ -321,11 +239,13 @@ class TrackingBasemapHelperClass(object):
         _ = self.bm.fillcontinents()
         _ = self.bm.plot(55, 55, 'bo', latlon=True)
 
-        with NamedTemporaryFile(suffix='.png', delete=False) as f:
-            fig.savefig(f.name, bbox_inches='tight', pad_inches=0, dpi=300)
-            img = cv2.imread(f.name)
+        with io.BytesIO() as buf:
+            fig.savefig(buf, dpi=self.dpi, format='png', pad_inches=0, bbox_inches='tight')
+            buf.seek(0)
+            img = cv2.imdecode(np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8)), cv2.IMREAD_COLOR)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             h, w, c = img.shape
-        lons_proj, lats_proj, x_proj, y_proj = self.bm.makegrid(*(img.shape[:-1]), returnxy=True)
+        lons_proj, lats_proj, x_proj, y_proj = self.bm.makegrid(*(img.shape[:-1][::-1]), returnxy=True)
         self.projection_grid = {'lons_proj': lons_proj,
                                 'lats_proj': lats_proj,
                                 'x_proj': x_proj,
@@ -343,13 +263,10 @@ class TrackingBasemapHelperClass(object):
         p = self.bm.drawparallels([self.lats.min() + i * (self.lats.max() - self.lats.min()) / 5. for i in range(6)])
         plt.axis("off")
 
-        # buf = io.BytesIO()
-        # self.BasemapFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
-        # plt.close()
-        # buf.seek(0)
-        with NamedTemporaryFile(suffix='.png', delete=False) as f:
-            self.BasemapFigure.savefig(f.name, bbox_inches='tight', pad_inches=0, dpi=self.dpi)
-            img = cv2.imread(f.name)
+        with io.BytesIO() as buf:
+            self.BasemapFigure.savefig(buf, dpi=self.dpi, format='png', pad_inches=0, bbox_inches='tight')
+            buf.seek(0)
+            img = cv2.imdecode(np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8)), cv2.IMREAD_COLOR)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             h, w, c = img.shape
         self.BasemapLayerImage = np.copy(img)
@@ -364,27 +281,13 @@ class TrackingBasemapHelperClass(object):
             if (counter > 1) & (debug):
                 self.__dict__['DataLayerImage_%s' % dataname] = debug_cache
             else:
-                DataFigure = plt.figure(figsize=(4,4), dpi=self.dpi)
                 data = self.__dict__['data_%s' % dataname]
-                ax = plt.Axes(DataFigure, [0., 0., 1., 1.])
-                ax.set_axis_off()
-                DataFigure.add_axes(ax)
-
-                im = self.bm.pcolor(self.lons.data, self.lats.data, data,
-                                    latlon=True, alpha=1.0,
-                                    vmin=vmin, vmax=vmax, cmap=cmap)
-                plt.axis("off")
-
-                # with NamedTemporaryFile(suffix='.png', delete=False) as f:
-                with io.BytesIO() as buf:
-                    # self.BasemapFigure.savefig(f.name, bbox_inches='tight', pad_inches=0, dpi=self.dpi)
-                    self.BasemapFigure.savefig(buf, dpi=300, format='png', pad_inches=0, bbox_inches='tight')
-                    buf.seek(0)
-                    # img = cv2.imread(f.name)
-
-                    img = cv2.imdecode(np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8)), cv2.IMREAD_COLOR)
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    h, w, c = img.shape
+                data_interpolated = interpolate_data(data,
+                                                     self.interpolation_constants['interpolation_inds'],
+                                                     self.interpolation_constants['interpolation_wghts'],
+                                                     self.interpolation_constants['interpolation_shape'])
+                data_interpolated_normed10 = (data_interpolated-vmin)/(vmax-vmin)
+                img = (cmap(data_interpolated_normed10)[:,:,:-1]*255).astype(np.uint8)
                 self.__dict__['DataLayerImage_%s' % dataname] = np.copy(img)
 
                 debug_cache = np.copy(self.__dict__['DataLayerImage_%s' % dataname])
