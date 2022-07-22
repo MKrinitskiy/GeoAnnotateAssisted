@@ -41,6 +41,8 @@ class MainWindow(QMainWindow):
     # def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None, defaultSaveDir=None):
     def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None):
         super(MainWindow, self).__init__()
+        action = partial(newAction, self)
+
         self.setWindowTitle(__appname__)
 
         self._basemaphelper = None
@@ -164,17 +166,42 @@ class MainWindow(QMainWindow):
 
 
         #region File List widget
-        self.fileListWidget = QListWidget()
-        self.fileListWidget.itemDoubleClicked.connect(self.fileitemDoubleClicked)
         filelistLayout = QVBoxLayout()
         filelistLayout.setContentsMargins(0, 0, 0, 0)
+
+        self.startDateEdit = QtWidgets.QDateEdit(calendarPopup=True)
+        self.startDateEdit.setDateTime(QtCore.QDateTime.currentDateTime().addDays(-30))
+        self.startDateEdit.dateChanged.connect(self.startDateEdit_dateChanged)
+
+        self.endDateEdit = QtWidgets.QDateEdit(calendarPopup=True)
+        self.endDateEdit.setDateTime(QtCore.QDateTime.currentDateTime())
+        self.endDateEdit.dateChanged.connect(self.endDateEdit_dateChanged)
+
+        self.listServersideDataButton = QToolButton()
+        self.listServersideDataButton.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        listServersideDataAction = action('List server-side data', self.ListServersideDataSnapshots, None, None,
+                                     u'Pick date for data list at server', enabled=True)
+        self.listServersideDataButton.setDefaultAction(listServersideDataAction)
+
+        dateRangePickerButtons = QHBoxLayout()
+        dateRangePickerButtons.addWidget(self.startDateEdit)
+        dateRangePickerButtons.addWidget(self.endDateEdit)
+        dateRangePickerButtons.addWidget(self.listServersideDataButton)
+        dateRangePickerButtonsContainer = QWidget()
+        dateRangePickerButtonsContainer.setLayout(dateRangePickerButtons)
+        filelistLayout.addWidget(dateRangePickerButtonsContainer)
+
+
+
+        self.fileListWidget = QListWidget()
+        self.fileListWidget.itemDoubleClicked.connect(self.fileitemDoubleClicked)
+
         filelistLayout.addWidget(self.fileListWidget)
         fileListContainer = QWidget()
         fileListContainer.setLayout(filelistLayout)
         self.filedock = QDockWidget(u'File List', self)
         self.filedock.setObjectName(u'Files')
         self.filedock.setWidget(fileListContainer)
-        #endregion
         self.addDockWidget(Qt.RightDockWidgetArea, self.filedock)
         #endregion File List widget
 
@@ -189,6 +216,15 @@ class MainWindow(QMainWindow):
         # self.addDockWidget(Qt.BottomDockWidgetArea, self.logsDock)
         # # endregion MKrinitskiy - track list widget
 
+
+        try:
+            self.start_dt = self.settings.start_dt
+        except:
+            self.start_dt = datetime.datetime.utcnow() + datetime.timedelta(days=-30)
+        try:
+            self.end_dt = self.settings.end_dt
+        except:
+            self.end_dt = datetime.datetime.utcnow()
 
         self.currently_opened_source_file = None
 
@@ -217,7 +253,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(scroll)
 
         #region Actions
-        action = partial(newAction, self)
         quit = action('&Quit', self.closing,
                       'Ctrl+Q', 'quit', u'Quit application')
 
@@ -570,22 +605,17 @@ class MainWindow(QMainWindow):
         addActions(self.menus.edit, actions + self.actions.editMenu)
 
 
-    # def setBeginner(self):
-    #     self.tools.clear()
-    #     addActions(self.tools, self.actions.beginner)
-
-    # def setAdvanced(self):
-    #     self.tools.clear()
-    #     addActions(self.tools, self.actions.advanced)
 
     def setDirty(self):
         self.dirty = True
         # self.actions.save.setEnabled(True)
 
+
     def setClean(self):
         self.dirty = False
         # self.actions.save.setEnabled(False)
         self.actions.create.setEnabled(True)
+
 
     def toggleActions(self, value=True):
         """Enable/Disable widgets which depend on an opened image."""
@@ -713,8 +743,6 @@ class MainWindow(QMainWindow):
                 self.trackListWidget.resizeColumnToContents(1)
 
 
-
-
     def createShape(self):
         assert self.beginner()
         self.canvas.setEditing(False)
@@ -776,21 +804,13 @@ class MainWindow(QMainWindow):
 
 
     def fileitemDoubleClicked(self, item=None):
-        pattern = r'.+:uuid:(.+)'
+        # pattern = r'.+| uuid:(.+) |.+'
+        pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| (MSG\d) \| uuid:(.+) \|.+\.nc'
         selected_str = ustr(item.text())
         m = re.match(pattern, selected_str)
-        curr_uuid = m.groups()[0]
+        curr_uuid = m.groups()[7]
         item.setSelected(True)
         self.loadFile(curr_uuid)
-
-
-    # def fileitemDoubleClicked(self, item=None):
-    #     currIndex = self.mImgList.index(ustr(item.text()))
-    #     if currIndex < len(self.mImgList):
-    #         filename = self.mImgList[currIndex]
-    #         if filename:
-    #             self.loadFile(filename)
-
 
 
     def btnstate(self, item= None):
@@ -831,6 +851,7 @@ class MainWindow(QMainWindow):
         self.actions.edit.setEnabled(selected)
         self.actions.shapeLineColor.setEnabled(selected)
         self.actions.shapeFillColor.setEnabled(selected)
+
 
 
     def addLabel(self, shape):
@@ -959,6 +980,7 @@ class MainWindow(QMainWindow):
             return False
 
 
+
     def labelSelectionChanged(self):
         item = self.currentItem()
         if item and self.canvas.editing():
@@ -979,6 +1001,7 @@ class MainWindow(QMainWindow):
                     found_item['item'].setSelected(True)
 
 
+
     def labelItemChanged(self, item):
         shape = self.itemsToShapes[item]
         shape_name = item.text(0)
@@ -994,6 +1017,7 @@ class MainWindow(QMainWindow):
                                'The label updates were not written to the database for some reason.\nPlease refer to the "errors.log" file and make the developer know about the error.')
         else:  # User probably changed item visibility
             self.canvas.setShapeVisible(shape, item.checkState(0) == Qt.Checked)
+
 
 
     def trackItemChanged(self, curr_item):
@@ -1121,6 +1145,9 @@ class MainWindow(QMainWindow):
         units = - delta / (8 * 15)
         bar = self.scrollBars[orientation]
         bar.setValue(bar.value() + bar.singleStep() * units)
+
+
+
 
     def setZoom(self, value):
         self.actions.fitWidth.setChecked(False)
@@ -1323,7 +1350,7 @@ class MainWindow(QMainWindow):
         self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
         image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
 
-        self.status("Loaded data for %s with serverside-uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%s'), uuid))
+        self.status("Loaded data for %s with serverside-uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%S'), uuid))
         self.image = image
         # self.filePath = unicodeFilePath
         self.canvas.loadPixmap(QPixmap.fromImage(image))
@@ -1347,7 +1374,7 @@ class MainWindow(QMainWindow):
             if labels_cnn_predicted is not None:
                 self.loadPredictedLabels(labels_cnn_predicted)
 
-        self.setWindowTitle(__appname__ + ' ' + "%s :uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%s'), uuid))
+        self.setWindowTitle(__appname__ + ' ' + "%s :uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%S'), uuid))
 
         # Default : select last item if there is at least one item
         if self.labelList.topLevelItemCount():
@@ -1357,86 +1384,6 @@ class MainWindow(QMainWindow):
         self.canvas.setFocus(True)
         return True
 
-
-
-
-    # def loadFile(self, filePath=None):
-    #     self.resetState()
-    #     self.canvas.setEnabled(False)
-    #     if filePath is None:
-    #         filePath = self.settings.get(SETTING_FILENAME)
-    #
-    #     filePath = ustr(filePath)
-    #
-    #     unicodeFilePath = ustr(filePath)
-    #     if unicodeFilePath and self.fileListWidget.count() > 0:
-    #         index = self.mImgList.index(unicodeFilePath)
-    #         fileWidgetItem = self.fileListWidget.item(index)
-    #         fileWidgetItem.setSelected(True)
-    #
-    #     if unicodeFilePath and os.path.exists(unicodeFilePath):
-    #         self.curr_dt = DateTimeFromDataFName(unicodeFilePath)
-    #
-    #         try:
-    #             if self.preserveBasemapConfig.isChecked() & (self.basemaphelper is not None):
-    #                 self.basemaphelper = read(unicodeFilePath, default = self.basemaphelper)
-    #             else:
-    #                 self.basemaphelper = read(unicodeFilePath, None)
-    #         except:
-    #             ReportException('./error.log', None)
-    #             return False
-    #
-    #         height, width, channel = self.basemaphelper.CVimageCombined.shape
-    #         bytesPerLine = 3 * width
-    #
-    #         self.imageData = self.basemaphelper.CVimageCombined
-    #         self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
-    #         self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
-    #         image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
-    #
-    #         # self.labelFile = None
-    #
-    #         # image = QImage.fromData(self.imageData)
-    #         if image.isNull():
-    #             self.errorMessage(u'Error opening file',
-    #                               u"<p>Make sure <i>%s</i> is a valid image file." % unicodeFilePath)
-    #             self.status("Error reading %s" % unicodeFilePath)
-    #             return False
-    #
-    #         self.status("Loaded %s" % os.path.basename(unicodeFilePath))
-    #         self.image = image
-    #         self.filePath = unicodeFilePath
-    #         self.canvas.loadPixmap(QPixmap.fromImage(image))
-    #
-    #         self.setClean()
-    #         self.canvas.setEnabled(True)
-    #         self.adjustScale(initial=True)
-    #         self.paintCanvas()
-    #         self.addRecentFile(self.filePath)
-    #         self.toggleActions(True)
-    #
-    #         self.actions.refreshBasemap.setEnabled(True)
-    #         self.actions.zoomHires.setEnabled(True)
-    #         self.actions.switchDataChannel.setEnabled(True)
-    #
-    #         labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, unicodeFilePath)
-    #         self.loadLabels(labels_from_database)
-    #
-    #         if self.settings.get(SETTING_DETECTION_USE_NEURAL_ASSISTANCE):
-    #             labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
-    #             if labels_cnn_predicted is not None:
-    #                 self.loadPredictedLabels(labels_cnn_predicted)
-    #
-    #         self.setWindowTitle(__appname__ + ' ' + filePath)
-    #
-    #         # Default : select last item if there is at least one item
-    #         if self.labelList.topLevelItemCount():
-    #             self.labelList.setCurrentItem(self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1))
-    #             self.labelList.topLevelItem(self.labelList.topLevelItemCount()-1).setSelected(True)
-    #
-    #         self.canvas.setFocus(True)
-    #         return True
-    #     return False
 
 
 
@@ -1476,6 +1423,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if not self.mayContinue():
             event.ignore()
+
         settings = self.settings
         if self.dirname is None:
             settings[SETTING_FILENAME] = self.filePath if self.filePath else ''
@@ -1487,13 +1435,16 @@ class MainWindow(QMainWindow):
         settings[SETTING_WIN_STATE] = self.saveState()
         settings[SETTING_LINE_COLOR] = self.lineColor
         settings[SETTING_FILL_COLOR] = self.fillColor
-        settings[SETTING_RECENT_FILES] = self.recentFiles
-        settings[SETTING_ADVANCE_MODE] = not self._beginner
+        # settings[SETTING_RECENT_FILES] = self.recentFiles
+        # settings[SETTING_ADVANCE_MODE] = not self._beginner
 
-        if self.lastOpenDir and os.path.exists(self.lastOpenDir):
-            settings[SETTING_LAST_OPEN_DIR] = self.lastOpenDir
-        else:
-            settings[SETTING_LAST_OPEN_DIR] = ""
+        # if self.lastOpenDir and os.path.exists(self.lastOpenDir):
+        #     settings[SETTING_LAST_OPEN_DIR] = self.lastOpenDir
+        # else:
+        #     settings[SETTING_LAST_OPEN_DIR] = ""
+
+        settings[SETTING_DATERANGE_START_DATE] = self.start_dt
+        settings[SETTING_DATERANGE_END_DATE] = self.end_dt
 
         settings[SETTING_SINGLE_CLASS] = self.singleClassMode.isChecked()
         settings[SETTING_PAINT_LABEL] = self.paintLabelsOption.isChecked()
@@ -1502,49 +1453,31 @@ class MainWindow(QMainWindow):
     ## User Dialogs ##
 
 
-    # def listServerSideDataFiles(self, _value=False, dirpath=None):
-    #     if not self.mayContinue():
-    #         return
-    #
-    #     defaultOpenDirPath = dirpath if dirpath else '.'
-    #     if self.lastOpenDir and os.path.exists(self.lastOpenDir):
-    #         defaultOpenDirPath = self.lastOpenDir
-    #     else:
-    #         defaultOpenDirPath = os.path.dirname(self.filePath) if self.filePath else '.'
-    #
-    #     targetDirPath = ustr(QFileDialog.getExistingDirectory(self,
-    #                                                  '%s - Open Directory' % __appname__, defaultOpenDirPath,
-    #                                                  QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
-    #     self.importDirImages(targetDirPath)
 
 
     def ListServersideDataSnapshots(self, _value=False):
-        self.basemaphelper.RequestDataSnapshotsList(datetime.datetime(2019, 1, 1, 0, 0, 0), datetime.datetime(2019, 12, 31, 23, 59, 59))
+        self.basemaphelper.RequestDataSnapshotsList(self.start_dt, self.end_dt)
 
         self.importServersideDataSnapshotsList(self.basemaphelper.srvSourceDataList)
+
+
+    def startDateEdit_dateChanged(self):
+        self.start_dt = datetime.datetime.combine(self.startDateEdit.date().toPyDate(), datetime.datetime.min.time())
+
+    def endDateEdit_dateChanged(self):
+        self.end_dt = datetime.datetime.combine(self.endDateEdit.date().toPyDate(), datetime.datetime.max.time())
+
+
 
     def importServersideDataSnapshotsList(self, srvSourceDataList):
         self.currDataUUID = ''
         self.fileListWidget.clear()
         # srvSourceDataList should be Pandas.DataFrame
         for idx,row in srvSourceDataList.iterrows():
-            item_str = '%s :uuid:%s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'])
+            item_str = '%s | %s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['MSG_label'], row['uuid'], os.path.basename(row['full_fname']))
             item = QListWidgetItem(item_str)
             self.fileListWidget.addItem(item)
 
-    # def importDirImages(self, dirpath):
-    #     if not self.mayContinue() or not dirpath:
-    #         return
-    #
-    #     self.lastOpenDir = dirpath
-    #     self.dirname = dirpath
-    #     self.filePath = None
-    #     self.fileListWidget.clear()
-    #     self.mImgList = find_files(dirpath, '*.nc')
-    #     self.mImgList = SortFNamesByDateTime(self.mImgList)
-    #     for imgPath in self.mImgList:
-    #         item = QListWidgetItem(imgPath)
-    #         self.fileListWidget.addItem(item)
 
     def openPrevImg(self, _value=False):
         if not self.mayContinue():
@@ -1602,13 +1535,6 @@ class MainWindow(QMainWindow):
             if isinstance(filename, (tuple, list)):
                 filename = filename[0]
             self.loadFile(filename)
-
-
-    # def saveFile(self, _value=False):
-    #     if self.saveLabels():
-    #         self.setClean()
-    #         self.statusBar().showMessage('Saved labels to database')
-    #         self.statusBar().show()
 
 
 
