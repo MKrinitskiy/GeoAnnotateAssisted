@@ -120,6 +120,8 @@ class TrackingBasemapHelperClass:
                                      'lat': 'latitudes',
                                      'lon': 'longitudes'}
         self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
+        self.lons_proj = None
+        self.lats_proj = None
 
 
     # def ComputeCenterAndRange(self):
@@ -138,6 +140,8 @@ class TrackingBasemapHelperClass:
         # self.CVimageCombined = np.copy(rec_dict['CVimageCombined'])
         for dataname in self.channelNames:
             self.__dict__['DataLayerImage_%s' % dataname] = np.copy(rec_dict['DataLayerImage_%s' % dataname])
+            self.__dict__['DataInterpolated_%s' % dataname] = np.copy(rec_dict['DataInterpolated_%s' % dataname])
+
         # self.llcrnrlon = rec_dict['llcrnrlon']
         # self.llcrnrlat = rec_dict['llcrnrlat']
         # self.urcrnrlon = rec_dict['urcrnrlon']
@@ -146,9 +150,52 @@ class TrackingBasemapHelperClass:
         # self.cLon = rec_dict['cLon']
         # self.LathalfRange = rec_dict['LathalfRange']
         # self.LonHalfRange = rec_dict['LonHalfRange']
+
         self.dataToPlot = rec_dict['dataToPlot']
-        self.projection_grid = {'lons_proj': rec_dict['lons_proj'],
-                                'lats_proj': rec_dict['lats_proj']}
+        self.lons_proj = rec_dict['lons_proj']
+        self.lats_proj = rec_dict['lats_proj']
+
+
+
+    def xy2value(self, posx: int = 0, posy: int = 0):
+        dataname = self.dataToPlot
+
+        try:
+            retVal = self.__dict__['DataInterpolated_%s' % dataname][int(np.round(self.lons_proj.shape[0]-posy)), int(np.round(posx))]
+        except:
+            retVal = 0
+
+        return retVal
+
+
+    def xy2latlon(self, posx: int = 0, posy: int = 0):
+        retLat, retLon = 0.0, 0.0
+        try:
+            retLon = self.lons_proj[int(np.round(self.lons_proj.shape[0] - posy)), int(np.round(posx))]
+            retLat = self.lats_proj[int(np.round(self.lats_proj.shape[0] - posy)), int(np.round(posx))]
+        except:
+            ReportException('./logs/error.log', None)
+
+        return retLon, retLat
+
+
+    def latlon2xy(self, poslat: float = 45, poslon: float = 45):
+        # top-left corner based;
+        # xy in terms of data arrays indices
+        retx, rety = 0,0
+        try:
+            latlon_dist = np.sqrt(((self.lats_proj-poslat)**2 + (self.lons_proj - poslon)**2))
+            ind = np.argmin(latlon_dist)
+            ind = np.unravel_index(ind, self.lats_proj.shape)
+            retx = ind[1]
+            rety = self.lats_proj.shape[0]-ind[0]
+            if rety < 0:
+                rety = 0
+            elif rety > self.lats_proj.shape[0]-1:
+                rety = self.lats_proj.shape[0]-1
+        except:
+            ReportException('./logs/error.log', None)
+        return retx, rety
 
 
 
@@ -296,7 +343,7 @@ class TrackingBasemapHelperClass:
 
 
 
-    def FuseBasemapWithData(self, alpha = 0.3, beta = 0.7):
+    def FuseBasemapWithData(self, alpha = 0.4, beta = 0.6):
         BasemapImageCV = self.BasemapLayerImage
         DataLayerImageCV = self.__dict__['DataLayerImage_%s' % self.dataToPlot]
         self.CVimageCombined = cv2.addWeighted(BasemapImageCV, alpha, DataLayerImageCV, beta, 0.0)
@@ -406,61 +453,6 @@ class TrackingBasemapHelperClass:
                     self.deflate_recieved_dict(rec_dict)
                 else:
                     raise Exception('Generated images transfer failed.')
-
-
-    # def SwitchSourceData(self, filename):
-    #     self.dataSourceFile = filename
-    #     # self.ReadSourceData()
-    #
-    #     url1 = 'http://%s:1999/exec?command=SwitchSourceData&src_fname=%s&webapi_client_id=%s' % (self.remotehost, os.path.basename(self.dataSourceFile), self.webapi_client_id)
-    #     url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
-    #     try:
-    #         req1 = requests.get(url1, stream=True)
-    #         if self.app_args.http_logging:
-    #             logging.info(url1)
-    #     except Exception as ex:
-    #         print('Request failed. Please check the connection.')
-    #         ReportException('./logs/errors.log', ex)
-    #         raise RequestFailedException()
-    #
-    #     print(req1.headers)
-    #     ctype = req1.headers['Content-Type']
-    #     m = re.match(r'.+charset=(.+)', ctype)
-    #     enc = 'utf-8'
-    #     if m is not None:
-    #         enc = m.groups()[0]
-    #         print('encoding detected: %s' % enc)
-    #     print(req1.status_code)
-    #
-    #     for line in streamlines_gen(req1):
-    #         print(line)
-    #         if line == 'READY':
-    #             print('got READY response')
-    #             print('requesting image')
-    #
-    #             try:
-    #                 req2 = requests.get(url2)
-    #                 if self.app_args.http_logging:
-    #                     logging.info(url2)
-    #             except Exception as ex:
-    #                 print('Request failed. Please check the connection.')
-    #                 ReportException('./logs/errors.log', ex)
-    #                 raise RequestFailedException()
-    #             print(req2.status_code)
-    #             print(req2.headers)
-    #
-    #             rec_dict = None
-    #             with BytesIO() as bytesf:
-    #                 bytesf.write(req2.content)
-    #                 bytesf.seek(0)
-    #                 rec_dict = pickle.load(bytesf)
-    #
-    #             if rec_dict is not None:
-    #                 self.deflate_recieved_dict(rec_dict)
-    #             else:
-    #                 raise Exception('Generated images transfer failed.')
-
-
 
     def RequestPredictedMCSlabels(self):
         url1 = 'http://%s:1999/exec?command=PredictMCScurrentData&webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)

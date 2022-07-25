@@ -57,6 +57,6 @@ class TrackSelectionDialog(QDialog):
         i = 0
         while model.item(i):
             if ((model.item(i).checkState() == Qt.Checked) and (model.item(i) != item)):
-                model.item(i).setCheckState(Qt.Unchecked)
+                model.item(i).setCheckState(0, Qt.Unchecked)
             i += 1
         model.itemChanged.connect(self.itemSelectionChanged)

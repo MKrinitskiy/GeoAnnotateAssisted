@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         # self.defaultSaveDir = defaultSaveDir
 
         # For loading all image under a directory
-        self.mImgList = []
+        # self.mImgList = []
         self.dirname = None
         self.labelHist = []
         self.lastOpenDir = None
@@ -77,7 +77,6 @@ class MainWindow(QMainWindow):
         self.dirty = False
 
         self._noSelectionSlot = False
-        self._beginner = True
 
         self.label_types = args.labels_type
         self.shapes_points_count = 3
@@ -165,16 +164,38 @@ class MainWindow(QMainWindow):
 
 
 
+        try:
+            self.start_dt = self.settings.get(SETTING_DATERANGE_START_DATE, datetime.datetime.utcnow() + datetime.timedelta(days=-30))
+        except:
+            self.start_dt = datetime.datetime.utcnow() + datetime.timedelta(days=-30)
+
+        try:
+            self.end_dt = self.settings.get(SETTING_DATERANGE_END_DATE, datetime.datetime.utcnow())
+        except:
+            self.end_dt = datetime.datetime.utcnow()
+
         #region File List widget
         filelistLayout = QVBoxLayout()
         filelistLayout.setContentsMargins(0, 0, 0, 0)
 
-        self.startDateEdit = QtWidgets.QDateEdit(calendarPopup=True)
-        self.startDateEdit.setDateTime(QtCore.QDateTime.currentDateTime().addDays(-30))
+        self.startDateEdit = QtWidgets.QDateEdit(calendarPopup=True, )
+        self.startDateEdit.setDisplayFormat("dd-MM-yyyy")
+        try:
+            startQDateTime = QtCore.QDateTime.fromString(datetime.datetime.strftime(self.start_dt, '%Y-%m-%dT%H:%M:%S'),
+                                                         Qt.ISODate)
+        except:
+            startQDateTime = QtCore.QDateTime.currentDateTime().addDays(-30)
+        self.startDateEdit.setDateTime(startQDateTime)
         self.startDateEdit.dateChanged.connect(self.startDateEdit_dateChanged)
 
         self.endDateEdit = QtWidgets.QDateEdit(calendarPopup=True)
-        self.endDateEdit.setDateTime(QtCore.QDateTime.currentDateTime())
+        self.endDateEdit.setDisplayFormat("dd-MM-yyyy")
+        try:
+            endQDateTime = QtCore.QDateTime.fromString(datetime.datetime.strftime(self.end_dt, '%Y-%m-%dT%H:%M:%S'),
+                                                         Qt.ISODate)
+        except:
+            endQDateTime = QtCore.QDateTime.currentDateTime().addDays(-30)
+        self.endDateEdit.setDateTime(endQDateTime)
         self.endDateEdit.dateChanged.connect(self.endDateEdit_dateChanged)
 
         self.listServersideDataButton = QToolButton()
@@ -217,15 +238,6 @@ class MainWindow(QMainWindow):
         # # endregion MKrinitskiy - track list widget
 
 
-        try:
-            self.start_dt = self.settings.start_dt
-        except:
-            self.start_dt = datetime.datetime.utcnow() + datetime.timedelta(days=-30)
-        try:
-            self.end_dt = self.settings.end_dt
-        except:
-            self.end_dt = datetime.datetime.utcnow()
-
         self.currently_opened_source_file = None
 
         self.zoomWidget = ZoomWidget()
@@ -264,7 +276,7 @@ class MainWindow(QMainWindow):
         # opendir = action('&Open Dir', self.openDirDialog,
         #                  'Ctrl+u', 'open', u'Open Dir')
 
-        listServersideDataSnapshots = action('&List server-side\ndata files', self.ListServersideDataSnapshots, 'Ctrl+u', 'open', u'Open Dir')
+        # listServersideDataSnapshots = action('&List server-side\ndata files', self.ListServersideDataSnapshots, 'Ctrl+u', 'open', u'Open Dir')
 
         openNextImg = action('Next file', self.openNextImg,
                              'd', 'next', u'Open Next')
@@ -287,8 +299,8 @@ class MainWindow(QMainWindow):
         editMode = action('&Edit ellipse', self.setEditMode,
                           'Ctrl+J', 'edit', u'Move and edit Boxs', enabled=False)
 
-        create = action('Create a label', self.createShape,
-                        'w', 'new', u'Draw a new label', enabled=False)
+        # create = action('Create a label', self.createShape,
+        #                 'w', 'new', u'Draw a new label', enabled=False)
 
         delete = action('Delete label', self.deleteSelectedShape,
                         'Delete', 'delete', u'Delete', enabled=False)
@@ -299,11 +311,11 @@ class MainWindow(QMainWindow):
         continue_track = action('Continue a track', self.continueExistingTrack, None,
                              'continue track', u'Continue an existing track...')
 
-        hideAll = action('&Hide ellipse', partial(self.togglePolygons, False),
-                         'Ctrl+H', 'hide', u'Hide all Boxs',
+        hideAll = action('&Hide labels', partial(self.togglePolygons, False),
+                         'Ctrl+H', 'hide', u'Hide all labels',
                          enabled=False)
-        showAll = action('&Show ellipse', partial(self.togglePolygons, True),
-                         'Ctrl+A', 'hide', u'Show all Boxs',
+        showAll = action('&Show labels', partial(self.togglePolygons, True),
+                         'Ctrl+A', 'hide', u'Show all labels',
                          enabled=False)
 
         showInfo = action('&Information', self.showInfoDialog, None, 'help', u'Information')
@@ -314,7 +326,7 @@ class MainWindow(QMainWindow):
             u"Zoom in or out of the image. Also accessible with"
             " %s and %s from the canvas." % (fmtShortcut("Ctrl+[-+]"),
                                              fmtShortcut("Ctrl+Wheel")))
-        self.zoomWidget.setEnabled(False)
+        self.zoomWidget.setEnabled(True)
 
         zoomIn = action('Zoom &In', partial(self.addZoom, 10),
                         'Ctrl++', 'zoom-in', u'Increase zoom level', enabled=False)
@@ -387,7 +399,7 @@ class MainWindow(QMainWindow):
         #                       switchDataChannel=switchDataChannel)
 
         self.actions = struct(resetAll=resetAll,
-                              create=create, delete=delete, edit=edit,
+                              delete=delete, edit=edit,
                               createMode=createMode, editMode=editMode,
                               shapeLineColor=shapeLineColor, shapeFillColor=shapeFillColor,
                               zoom=zoom, zoomIn=zoomIn, zoomOut=zoomOut, zoomOrg=zoomOrg,
@@ -395,13 +407,11 @@ class MainWindow(QMainWindow):
                               zoomActions=zoomActions,
                               refreshBasemap=zoomReplotBasemap,
                               zoomHires=zoomIncreaseResolution,
-                              fileMenuActions=(listServersideDataSnapshots, resetAll, quit),
-                              beginner=(),
-                              advanced=(),
+                              fileMenuActions=(listServersideDataAction, resetAll, quit),
                               editMenu=(edit, delete, None),
-                              beginnerContext=(create, edit, delete, start_track, continue_track),
-                              advancedContext=(createMode, editMode, edit, delete, shapeLineColor, shapeFillColor),
-                              onLoadActive=(create, createMode, editMode),
+                              tools = (),
+                              context=(createMode, editMode, edit, delete, shapeLineColor, shapeFillColor),
+                              onLoadActive=(createMode, editMode),
                               onShapesPresent=(hideAll, showAll),
                               switchDataChannel=switchDataChannel)
 
@@ -432,7 +442,7 @@ class MainWindow(QMainWindow):
         self.paintLabelsOption.triggered.connect(self.togglePaintLabelsOption)
 
         addActions(self.menus.file,
-                   (listServersideDataSnapshots, resetAll, quit))
+                   (listServersideDataAction, resetAll, quit))
         # addActions(self.menus.help, (help, showInfo))
         addActions(self.menus.help, [showInfo])
         addActions(self.menus.view, (
@@ -448,19 +458,18 @@ class MainWindow(QMainWindow):
         self.menus.file.aboutToShow.connect(self.updateFileMenu)
 
         # Custom context menu for the canvas widget:
-        addActions(self.canvas.menus[0], self.actions.beginnerContext)
         addActions(self.canvas.menus[1], [action('&Move here', self.moveShape)])
 
         self.tools = self.toolbar('Tools')
-        self.actions.beginner = (
-            listServersideDataSnapshots, openNextImg, openPrevImg, None, create,
-            delete, None,
-            zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
+        # self.actions.beginner = (
+        #     openNextImg, openPrevImg, None, create,
+        #     delete, None,
+        #     zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
 
-        self.actions.advanced = (
-            listServersideDataSnapshots, openNextImg, openPrevImg, None,
-            createMode, editMode, None,
-            hideAll, showAll)
+        self.actions.tools = (openNextImg, openPrevImg, None,
+                              createMode, editMode, delete, None,
+                              hideAll, showAll, None,
+                              zoomIn, zoom, zoomOut, fitWindow, fitWidth, zoomReplotBasemap, zoomIncreaseResolution, switchDataChannel)
 
         #endregion Actions
 
@@ -591,17 +600,18 @@ class MainWindow(QMainWindow):
 
 
     def populateModeActions(self):
-        if self.beginner():
-            tool, menu = self.actions.beginner, self.actions.beginnerContext
-        else:
-            tool, menu = self.actions.advanced, self.actions.advancedContext
+        # if self.beginner():
+        #     tool, menu = self.actions.beginner, self.actions.beginnerContext
+        # else:
+        tool, menu = self.actions.tools, self.actions.context
         self.tools.clear()
         addActions(self.tools, tool)
         self.canvas.menus[0].clear()
         addActions(self.canvas.menus[0], menu)
         self.menus.edit.clear()
-        actions = (self.actions.create,) if self.beginner()\
-            else (self.actions.createMode, self.actions.editMode)
+        # actions = (self.actions.create,) if self.beginner()\
+        #     else (self.actions.createMode, self.actions.editMode)
+        actions = (self.actions.createMode, self.actions.editMode)
         addActions(self.menus.edit, actions + self.actions.editMenu)
 
 
@@ -614,7 +624,8 @@ class MainWindow(QMainWindow):
     def setClean(self):
         self.dirty = False
         # self.actions.save.setEnabled(False)
-        self.actions.create.setEnabled(True)
+        # self.actions.create.setEnabled(True)
+        self.actions.createMode.setEnabled(True)
 
 
     def toggleActions(self, value=True):
@@ -660,11 +671,11 @@ class MainWindow(QMainWindow):
             self.recentFiles.pop()
         self.recentFiles.insert(0, filePath)
 
-    def beginner(self):
-        return self._beginner
+    # def beginner(self):
+    #     return self._beginner
 
-    def advanced(self):
-        return not self.beginner()
+    # def advanced(self):
+    #     return not self.beginner()
 
     ## Callbacks ##
     def showInfoDialog(self):
@@ -743,20 +754,21 @@ class MainWindow(QMainWindow):
                 self.trackListWidget.resizeColumnToContents(1)
 
 
-    def createShape(self):
-        assert self.beginner()
-        self.canvas.setEditing(False)
-        self.actions.create.setEnabled(False)
+    # def createShape(self):
+    #     assert self.beginner()
+    #     self.canvas.setEditing(False)
+    #     self.actions.create.setEnabled(False)
+    #     self.app.setOverrideCursor(Qt.CrossCursor)
 
     def toggleDrawingSensitive(self, drawing=True):
         """In the middle of drawing, toggling between modes should be disabled."""
         self.actions.editMode.setEnabled(not drawing)
-        if not drawing and self.beginner():
-            # Cancel creation.
-            print('Cancel creation.')
-            self.canvas.setEditing(True)
-            self.canvas.restoreCursor()
-            self.actions.create.setEnabled(True)
+        # if not drawing and self.beginner():
+            # # Cancel creation.
+            # print('Cancel creation.')
+            # self.canvas.setEditing(True)
+            # self.canvas.restoreCursor()
+            # self.actions.create.setEnabled(True)
 
     def toggleDrawMode(self, edit=True):
         self.canvas.setEditing(edit)
@@ -764,11 +776,12 @@ class MainWindow(QMainWindow):
         self.actions.editMode.setEnabled(not edit)
 
     def setCreateMode(self):
-        assert self.advanced()
+        # assert self.advanced()
         self.toggleDrawMode(False)
+        self.app.setOverrideCursor(Qt.CrossCursor)
 
     def setEditMode(self):
-        assert self.advanced()
+        # assert self.advanced()
         self.toggleDrawMode(True)
         self.labelSelectionChanged()
 
@@ -889,7 +902,8 @@ class MainWindow(QMainWindow):
 
             # for (x, y),(lon,lat) in zip(latlonPoints):
             for (pt_name, pt_latlon) in sorted(label.pts.items(), key=lambda x: x[0]):
-                x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                # x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
                 shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
             shape.close()
             s.append(shape)
@@ -918,7 +932,8 @@ class MainWindow(QMainWindow):
                 shape = Shape(label=mcs, parent_canvas=self.canvas)
 
                 for (pt_name, pt_latlon) in sorted(mcs.pts.items(), key=lambda x: x[0]):
-                    x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                    # x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                    x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
                     shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
                 shape.close()
                 s.append(shape)
@@ -1045,7 +1060,8 @@ class MainWindow(QMainWindow):
                     curr_label = self.label_class.from_db_row_dict(label_row.to_dict())
                     shape = Shape(label=curr_label, parent_canvas=self.canvas)
                     for (pt_name, pt_latlon) in sorted(curr_label.pts.items(), key=lambda x: x[0]):
-                        x_pic, y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                        # x_pic, y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
+                        x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
                         shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
                     shape.close()
                     self.temporary_shapes.append(shape)
@@ -1091,11 +1107,11 @@ class MainWindow(QMainWindow):
             generate_color = generateColorByText(text)
             shape = self.canvas.setLastLabel(text, generate_color, generate_color)
             self.addLabel(shape)
-            if self.beginner():  # Switch to edit mode.
-                self.canvas.setEditing(True)
-                self.actions.create.setEnabled(True)
-            else:
-                self.actions.editMode.setEnabled(True)
+            # if self.beginner():  # Switch to edit mode.
+            #     self.canvas.setEditing(True)
+            #     self.actions.create.setEnabled(True)
+            # else:
+            self.actions.editMode.setEnabled(True)
             self.setDirty()
 
             if text not in self.labelHist:
@@ -1242,6 +1258,9 @@ class MainWindow(QMainWindow):
     def refreshBasemapHires(self):
         self.refreshBasemap(hires=True)
 
+
+
+
     def refreshBasemap(self, hires = False):
         self.labelList.clear()
 
@@ -1261,12 +1280,14 @@ class MainWindow(QMainWindow):
             # self.labelCoordinates.setText('vp_pos_pixmap: %g,%g; vp_size_pixmap_units: %g,%g' % (vp_pos_at_pixmap.x(), vp_pos_at_pixmap.y(), vp_size_pixmap_units.width(), vp_size_pixmap_units.height()))
             llcrnrPt = QPointF(vp_pos_at_pixmap.x(), vp_pos_at_pixmap.y() + vp_size_pixmap_units.height())
             urcrnrPt = QPointF(vp_pos_at_pixmap.x() + vp_size_pixmap_units.width(), vp_pos_at_pixmap.y())
-            llcrnrlat, llcrnrlon = self.canvas.transformToLatLon(llcrnrPt)
+            # llcrnrlat, llcrnrlon = self.canvas.transformToLatLon(llcrnrPt)
+            llcrnrlon, llcrnrlat = self.basemaphelper.xy2latlon(llcrnrPt.x(), llcrnrPt.y())
             llcrnrlat = min([llcrnrlat, 87.])
             llcrnrlat = max([llcrnrlat, -87.])
             llcrnrlon = min([llcrnrlon, 180.])
             llcrnrlon = max([llcrnrlon, -180.])
-            urcrnrlat, urcrnrlon = self.canvas.transformToLatLon(urcrnrPt)
+            # urcrnrlat, urcrnrlon = self.canvas.transformToLatLon(urcrnrPt)
+            urcrnrlon, urcrnrlat = self.basemaphelper.xy2latlon(urcrnrPt.x(), urcrnrPt.y())
             urcrnrlat = min([urcrnrlat, 87.])
             urcrnrlat = max([urcrnrlat, -87.])
             urcrnrlon = min([urcrnrlon, 180.])
@@ -1283,8 +1304,10 @@ class MainWindow(QMainWindow):
             # self.labelCoordinates.setText('vp_pos_pixmap: %g,%g; vp_size_pixmap_units: %g,%g' % (vp_pos_at_pixmap.x(), vp_pos_at_pixmap.y(), vp_size_pixmap_units.width(), vp_size_pixmap_units.height()))
             llcrnrPt = QPointF(vp_pos_at_pixmap.x(), vp_pos_at_pixmap.y()+vp_size_pixmap_units.height())
             urcrnrPt = QPointF(vp_pos_at_pixmap.x() + vp_size_pixmap_units.width(), vp_pos_at_pixmap.y())
-            llcrnrlat,llcrnrlon = self.canvas.transformToLatLon(llcrnrPt)
-            urcrnrlat, urcrnrlon = self.canvas.transformToLatLon(urcrnrPt)
+            # llcrnrlat,llcrnrlon = self.canvas.transformToLatLon(llcrnrPt)
+            # urcrnrlat, urcrnrlon = self.canvas.transformToLatLon(urcrnrPt)
+            llcrnrlon,llcrnrlat = self.basemaphelper.xy2latlon(llcrnrPt.x(), llcrnrPt.y())
+            urcrnrlon,urcrnrlat = self.basemaphelper.xy2latlon(urcrnrPt.x(), urcrnrPt.y())
 
         try:
             self.basemaphelper.SetNewLatLonLimits(llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, resolution = 'h' if hires else 'c')
@@ -1317,9 +1340,10 @@ class MainWindow(QMainWindow):
         self.paintCanvas()
 
 
+
     def togglePolygons(self, value):
         for item, shape in self.itemsToShapes.items():
-            item.setCheckState(Qt.Checked if value else Qt.Unchecked)
+            item.setCheckState(0, Qt.Checked if value else Qt.Unchecked)
 
 
 
@@ -1342,12 +1366,14 @@ class MainWindow(QMainWindow):
             ReportException('./logs/error.log', None)
             return False
 
-        height, width, channel = self.basemaphelper.CVimageCombined.shape
-        bytesPerLine = 3 * width
+
 
         self.imageData = self.basemaphelper.CVimageCombined
         self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
         self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
+
+        height, width, channel = self.basemaphelper.CVimageCombined.shape
+        bytesPerLine = 3 * width
         image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
 
         self.status("Loaded data for %s with serverside-uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%S'), uuid))
@@ -1483,36 +1509,41 @@ class MainWindow(QMainWindow):
         if not self.mayContinue():
             return
 
-        if len(self.mImgList) <= 0:
+        if self.fileListWidget.count() <= 0:
             return
 
-        if self.filePath is None:
-            return
+        currRow = self.fileListWidget.currentRow()
+        currItem = self.fileListWidget.currentItem()
 
-        currIndex = self.mImgList.index(self.filePath)
-        if currIndex - 1 >= 0:
-            filename = self.mImgList[currIndex - 1]
-            if filename:
-                self.loadFile(filename)
+        if not currItem:
+            self.fileListWidget.setCurrentItem(self.fileListWidget.item(self.fileListWidget.count()-2))
+        elif currRow == 0:
+            return
+        else:
+            self.fileListWidget.setCurrentRow(currRow - 1)
+
+        self.fileitemDoubleClicked(self.fileListWidget.currentItem())
 
 
     def openNextImg(self, _value=False):
         if not self.mayContinue():
             return
 
-        if len(self.mImgList) <= 0:
+        if self.fileListWidget.count() <= 0:
             return
 
-        filename = None
-        if self.filePath is None:
-            filename = self.mImgList[0]
-        else:
-            currIndex = self.mImgList.index(self.filePath)
-            if currIndex + 1 < len(self.mImgList):
-                filename = self.mImgList[currIndex + 1]
+        currRow = self.fileListWidget.currentRow()
+        currItem = self.fileListWidget.currentItem()
 
-        if filename:
-            self.loadFile(filename)
+        if not currItem:
+            self.fileListWidget.setCurrentItem(self.fileListWidget.item(0))
+        elif currRow == self.fileListWidget.count()-1:
+            return
+        else:
+            self.fileListWidget.setCurrentRow(currRow + 1)
+
+        self.fileitemDoubleClicked(self.fileListWidget.currentItem())
+
 
 
     def closing(self):
@@ -1658,6 +1689,7 @@ def get_main_app(argv=[]):
     app.setApplicationName(__appname__)
     app.setWindowIcon(newIcon("app"))
     win = MainWindow(None, os.path.join(os.path.dirname(sys.argv[0]), 'data', 'predefined_classes.txt'))
+    win.app = app
 
     win.show()
     return app, win

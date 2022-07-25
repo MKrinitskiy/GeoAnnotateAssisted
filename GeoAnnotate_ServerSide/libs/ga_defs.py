@@ -31,7 +31,7 @@ def EnsureDirectoryExists(pathStr):
             raise FileNotFoundError('the directory you are trying to place a file to doesn\'t exist and cannot be created:')
 
 
-def ReportException(err_fname, ex):
+def ReportException(err_fname):
     exc_type, exc_value, exc_traceback = sys.exc_info()
     with open(err_fname, 'a') as errf:
         errf.write('================ ' + str(datetime.datetime.now()) + ' ================\n')

@@ -21,6 +21,7 @@ import json
 from tempfile import NamedTemporaryFile
 from libs.u_interpolate import interpolation_weights, interpolate_data
 from libs.sat_service_defs import infer_ncfile_info_from_fname
+from hashlib import md5
 
 
 
@@ -123,6 +124,7 @@ class TrackingBasemapHelperClass(object):
         self.latlons_manager = LatLonDataManager_METEOSAT()
         self.curr_sat_label = 'None'
         self.dpi = 300
+        self.interpolation_constants_cache = {}
 
     def ReadSourceData(self):
         ds1 = Dataset(self.dataSourceFile, 'r')
@@ -132,13 +134,33 @@ class TrackingBasemapHelperClass(object):
         sat_label, dt_str = infer_ncfile_info_from_fname(self.dataSourceFile)
 
         if sat_label != self.curr_sat_label:
-            interpolation_inds, interpolation_wghts, interpolation_shape = interpolation_weights(self.lons.data,
-                                                                                                 self.lats.data,
-                                                                                                 self.projection_grid['lons_proj'],
-                                                                                                 self.projection_grid['lats_proj'])
-            self.interpolation_constants = {'interpolation_inds': interpolation_inds,
-                                            'interpolation_wghts': interpolation_wghts,
-                                            'interpolation_shape': interpolation_shape}
+            #try to load pre-calculated interp. constants
+            lons_md5 = md5(self.lons.data).hexdigest()
+            lats_md5 = md5(self.lats.data).hexdigest()
+            lons_proj_md5 = md5(self.projection_grid['lons_proj']).hexdigest()
+            lats_proj_md5 = md5(self.projection_grid['lats_proj']).hexdigest()
+            curr_interp_sources_md5 = md5((lons_md5+lats_md5+lons_proj_md5+lats_proj_md5).encode()).hexdigest()
+
+            if curr_interp_sources_md5 in self.interpolation_constants_cache:
+                self.interpolation_constants = self.interpolation_constants_cache[curr_interp_sources_md5]
+            else:
+                curr_interpolation_constants = self.loadInterpolationConstants(curr_interp_sources_md5)
+                if curr_interpolation_constants is not None:
+                    self.interpolation_constants_cache[curr_interp_sources_md5] = curr_interpolation_constants
+                    self.interpolation_constants = curr_interpolation_constants
+                else:
+                    interpolation_inds, interpolation_wghts, interpolation_shape = interpolation_weights(self.lons.data,
+                                                                                                         self.lats.data,
+                                                                                                         self.projection_grid['lons_proj'],
+                                                                                                         self.projection_grid['lats_proj'])
+                    curr_interpolation_constants = {'interpolation_inds': interpolation_inds,
+                                                    'interpolation_wghts': interpolation_wghts,
+                                                    'interpolation_shape': interpolation_shape,
+                                                    'zoom_applied': False,
+                                                    'interp_sources_md5': curr_interp_sources_md5}
+                    self.interpolation_constants_cache[curr_interp_sources_md5] = curr_interpolation_constants
+                    self.interpolation_constants = curr_interpolation_constants
+                    self.saveCurrentInterpolationConstants()
         self.curr_sat_label = sat_label
         self.curr_dt_str = dt_str
 
@@ -193,6 +215,7 @@ class TrackingBasemapHelperClass(object):
             self.df_pickled_basemaps_list = pd.DataFrame({k: pd.Series(dtype=t) for k, t in columns})
 
 
+
     def loadPickledBasemapObj(self, basemap_args_sha512: str):
         self.listAvailablePickledBasemapObjects()
 
@@ -202,7 +225,7 @@ class TrackingBasemapHelperClass(object):
                 bm = pickle.load(open(df_filtered.bm_fname.iloc[0], 'rb'))
                 return bm
             except Exception as ex:
-                ReportException('./logs/errors.log', ex)
+                ReportException('./logs/errors.log')
                 print('An exception was thrown. Take a look into the ./logs/errors.log file')
                 return None
         else:
@@ -220,17 +243,49 @@ class TrackingBasemapHelperClass(object):
 
 
 
+    def loadInterpolationConstants(self, interp_sources_md5: str):
+        try:
+            EnsureDirectoryExists('./cache/interpolation/')
+        except:
+            ReportException('./logs/error.log')
+            return None
+
+        try:
+            with open('./cache/interpolation/%s.pkl' % interp_sources_md5, 'rb') as f:
+                interpolation_constants = pickle.load(f)
+                return interpolation_constants
+        except:
+            ReportException('./logs/error.log')
+            return None
+
+
+
+    def saveCurrentInterpolationConstants(self):
+        try:
+            EnsureDirectoryExists('./cache/interpolation/')
+        except:
+            ReportException('./logs/error.log')
+            return
+
+        try:
+            with open('./cache/interpolation/%s.pkl' % self.interpolation_constants['interp_sources_md5'], 'wb') as f:
+                pickle.dump(self.interpolation_constants, f)
+        except:
+            ReportException('./logs/error.log')
+
+
     def createBasemapObj(self, basemap_args_json: str = None):
         try:
             self.bm = self.loadPickledBasemapObj(sha512(basemap_args_json.encode()).hexdigest())
         except:
-            ReportException('./logs/error.log', None)
+            ReportException('./logs/error.log')
             self.bm = None
 
         if self.bm == None:
             self.bm = Basemap(**(json.loads(basemap_args_json)))
             self.savePickledBasemapObj(basemap_args_json)
 
+        #region plot one basemap figure just to get image shape
         fig = plt.figure(figsize=(4, 4), dpi=300)
         ax = plt.Axes(fig, [0., 0., 1., 1.])
         ax.set_axis_off()
@@ -242,10 +297,14 @@ class TrackingBasemapHelperClass(object):
         with io.BytesIO() as buf:
             fig.savefig(buf, dpi=self.dpi, format='png', pad_inches=0, bbox_inches='tight')
             buf.seek(0)
-            img = cv2.imdecode(np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8)), cv2.IMREAD_COLOR)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            h, w, c = img.shape
-        lons_proj, lats_proj, x_proj, y_proj = self.bm.makegrid(*(img.shape[:-1][::-1]), returnxy=True)
+            basemapImg = cv2.imdecode(np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8)), cv2.IMREAD_COLOR)
+            basemapImg = cv2.cvtColor(basemapImg, cv2.COLOR_BGR2RGB)
+            h, w, c = basemapImg.shape
+        plt.close(fig)
+        #endregion
+
+        lons_proj, lats_proj, x_proj, y_proj = self.bm.makegrid(*(basemapImg.shape[:-1][::-1]), returnxy=True)
+
         self.projection_grid = {'lons_proj': lons_proj,
                                 'lats_proj': lats_proj,
                                 'x_proj': x_proj,
@@ -254,22 +313,25 @@ class TrackingBasemapHelperClass(object):
 
 
     def PlotBasemapBackground(self):
-        self.BasemapFigure = plt.figure(figsize=(4,4), dpi=self.dpi)
-        ax = plt.Axes(self.BasemapFigure, [0., 0., 1., 1.])
+        BasemapFigure = plt.figure(figsize=(4,4), dpi=self.dpi)
+        ax = plt.Axes(BasemapFigure, [0., 0., 1., 1.])
         ax.set_axis_off()
-        self.BasemapFigure.add_axes(ax)
-        self.bm.drawcoastlines()
+        BasemapFigure.add_axes(ax)
+        self.bm.drawcoastlines(linewidth=0.1)
+        self.bm.fillcontinents(color=(0.9, 0.9, 0.9))
         m = self.bm.drawmeridians([self.lons.min() + i * (self.lons.max() - self.lons.min()) / 5. for i in range(6)])
         p = self.bm.drawparallels([self.lats.min() + i * (self.lats.max() - self.lats.min()) / 5. for i in range(6)])
         plt.axis("off")
 
         with io.BytesIO() as buf:
-            self.BasemapFigure.savefig(buf, dpi=self.dpi, format='png', pad_inches=0, bbox_inches='tight')
+            BasemapFigure.savefig(buf, dpi=self.dpi, format='png', pad_inches=0, bbox_inches='tight')
             buf.seek(0)
             img = cv2.imdecode(np.copy(np.asarray(bytearray(buf.read()), dtype=np.uint8)), cv2.IMREAD_COLOR)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             h, w, c = img.shape
         self.BasemapLayerImage = np.copy(img)
+        plt.close(BasemapFigure)
+
 
 
     def PlotDataLayer(self, debug=False):
@@ -286,16 +348,20 @@ class TrackingBasemapHelperClass(object):
                                                      self.interpolation_constants['interpolation_inds'],
                                                      self.interpolation_constants['interpolation_wghts'],
                                                      self.interpolation_constants['interpolation_shape'])
+
+                self.__dict__['DataInterpolated_%s' % dataname] = np.copy(data_interpolated)
+
                 data_interpolated_normed10 = (data_interpolated-vmin)/(vmax-vmin)
                 img = (cmap(data_interpolated_normed10)[:,:,:-1]*255).astype(np.uint8)
-                self.__dict__['DataLayerImage_%s' % dataname] = np.copy(img)
+                img = cv2.flip(img, 0)
+                self.__dict__['DataLayerImage_%s' % dataname] = np.copy(img)[:,:,::-1]
 
                 debug_cache = np.copy(self.__dict__['DataLayerImage_%s' % dataname])
 
 
-    def FuseBasemapWithData(self, alpha = 0.3, beta = 0.7):
-        self.CVimageCombined = cv2.addWeighted(self.BasemapLayerImage, alpha, self.__dict__['DataLayerImage_%s' % self.dataToPlot], beta, 0.0)
 
+    def FuseBasemapWithData(self, alpha = 0.4, beta = 0.6):
+        self.CVimageCombined = cv2.addWeighted(self.BasemapLayerImage, alpha, self.__dict__['DataLayerImage_%s' % self.dataToPlot], beta, 0.0)
 
 
 
@@ -310,41 +376,15 @@ class TrackingBasemapHelperClass(object):
 
 
 
-    def cycleChannel(self, perform = True):
-        newChannel = ''
-        if self.dataToPlot == 'ch9':
-            newChannel = 'ch5'
-        elif self.dataToPlot == 'ch5':
-            newChannel = 'ch5_ch9'
-        elif self.dataToPlot == 'ch5_ch9':
-            newChannel = 'ch9'
-
-        if perform:
-            self.dataToPlot = newChannel
-            self.FuseBasemapWithData()
-            return newChannel
-        else:
-            return newChannel
-
-
-    def getValueStr_AtCoordinates(self, posLon, posLat):
-        currData = self.__dict__['data_%s' % self.dataToPlot]
-        dlat = self.lats - posLat
-        dlon = self.lons - posLon
-        dsqr = np.square(dlat) + np.square(dlon)
-        nearest_value = currData[np.unravel_index(np.argmin(dsqr), dsqr.shape)]
-        return '%f' % nearest_value
-
-
-    def getLatLonCoordinates(self, xypt):
-        if type(xypt) is list:
-            latlon_pts = [self.bm(pt['xpt'], pt['ypt'], inverse=True) for pt in xypt]
-            latlon_pts = [{'lonpt': latlonpt[0], 'latpt': latlonpt[1]} for latlonpt in latlon_pts]
-            return latlon_pts
-        else:
-            latlon_pt = self.bm(xypt['xpt'], xypt['ypt'], inverse=True)
-            latlon_pt = {'lonpt': latlon_pt[0], 'latpt': latlon_pt[1]}
-            return latlon_pt
+    # def getLatLonCoordinates(self, xypt):
+    #     if type(xypt) is list:
+    #         latlon_pts = [self.bm(pt['xpt'], pt['ypt'], inverse=True) for pt in xypt]
+    #         latlon_pts = [{'lonpt': latlonpt[0], 'latpt': latlonpt[1]} for latlonpt in latlon_pts]
+    #         return latlon_pts
+    #     else:
+    #         latlon_pt = self.bm(xypt['xpt'], xypt['ypt'], inverse=True)
+    #         latlon_pt = {'lonpt': latlon_pt[0], 'latpt': latlon_pt[1]}
+    #         return latlon_pt
 
 
 def t_brightness_calculate(data, channelname = 'ch9'):

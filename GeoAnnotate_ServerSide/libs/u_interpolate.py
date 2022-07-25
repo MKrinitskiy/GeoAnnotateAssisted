@@ -1,4 +1,6 @@
 from libs.u_grid import *
+import numpy as np
+import scipy.spatial.qhull as qhull
 
 
 def _interp_weights(xyz, uvw, d=None):
@@ -28,6 +30,10 @@ def _interpolate(values, vtx, wts, fill_value=np.nan):
     """
     ret = np.einsum('nj,nj->n', np.take(values, vtx), wts)
     ret[np.any(wts < 0, axis=1)] = fill_value
+    if type(values) is np.ma.MaskedArray:
+        masks = np.take(values.mask, vtx)
+        ret = np.ma.array(ret)
+        ret.mask = np.any(masks, axis=1) | np.isnan(ret)
     return ret
 
 def interpolation_weights(x, y, new_x, new_y):

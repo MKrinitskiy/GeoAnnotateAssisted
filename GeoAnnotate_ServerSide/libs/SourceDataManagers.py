@@ -60,7 +60,7 @@ class LatLonDataManager_METEOSAT:
             with open('./.cache/latlons_METEOSAT.pkl', 'rb') as f:
                 self.latlons = pickle.load(f)
         except:
-            ReportException('./logs/error.log', None)
+            ReportException('./logs/error.log')
             self.latlons = None
 
     def __call__(self, MSGlabel):

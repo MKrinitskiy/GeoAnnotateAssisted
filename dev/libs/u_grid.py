@@ -1,7 +1,7 @@
-import salem
-import pyproj
+# import salem
+# import pyproj
 import numpy as np
-from scipy.interpolate import griddata
+# from scipy.interpolate import griddata
 import scipy.spatial.qhull as qhull
 
 

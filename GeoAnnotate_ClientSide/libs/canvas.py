@@ -118,17 +118,16 @@ class Canvas(QWidget):
     def mouseMoveEvent(self, ev):
         """Update line with last point and current coordinates."""
         pos = self.transformPos(ev.pos())
-        posLat,posLon = self.transformToLatLon(pos)
+        try:
+            posLon,posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
+        except:
+            return
+        posValue = self.parent.basemaphelper.xy2value(pos.x(), pos.y())
+        self.parent.window().labelCoordinates.setText('lat: %.2f; lon: %.2f; value: %f' % (posLat, posLon, posValue))
+        self.setToolTip('lat: %.2f; lon: %.2f; value: %s' % (posLat, posLon, posValue))
+
+
         self.mousePosLatLon = QPointF(posLon, posLat)
-
-        # print(posLat, posLon)
-
-        # Update coordinates in status bar if image is opened
-        window = self.parent.window()
-        if window.filePath is not None:
-            self.parent.window().labelCoordinates.setText(
-                # 'X: %d; Y: %d' % (pos.x(), pos.y()))
-                'lat: %f; lon: %f' % (posLat, posLon))
 
         # Polygon drawing.
         if self.drawing_ellipse():
@@ -189,17 +188,6 @@ class Canvas(QWidget):
         # Update shape/vertex fill and tooltip value accordingly.
         # self.setToolTip("Image")
         # self.setToolTip('X: %d; Y: %d' % (pos.x(), pos.y()))
-
-        try:
-            bmhelper = self.parent.window().basemaphelper
-            valueStr = bmhelper.getValueStr_AtCoordinates(self.mousePosLatLon.x(), self.mousePosLatLon.y())
-            # valueStr = 'unknown'
-        except:
-            valueStr = 'unknown'
-
-        self.setToolTip('lat: %f; lon: %f; value: %s' % (posLat, posLon, valueStr))
-
-
 
 
         for shape in reversed([s for s in self.shapes if self.isVisible(s)]):
@@ -293,14 +281,20 @@ class Canvas(QWidget):
 
     def handleDrawing(self, pos):
         if self.current:
-            self.current.addPoint(pos, self.transformToLatLon(pos, True))
+            posLon, posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
+            qptLatLon = QPointF(posLon, posLat)
+            # self.current.addPoint(pos, self.transformToLatLon(pos, True))
+            self.current.addPoint(pos, qptLatLon)
             if len(self.current) == self.shapes_points_count:
                 self.current.close()
                 self.finalise()
         elif not self.outOfPixmap(pos):
             self.current = Shape(parent_canvas=self)
 
-            self.current.addPoint(pos, self.transformToLatLon(pos, True))
+            posLon, posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
+            qptLatLon = QPointF(posLon, posLat)
+            # self.current.addPoint(pos, self.transformToLatLon(pos, True))
+            self.current.addPoint(pos, qptLatLon)
 
             self.recalculateMovedLatlonPointsSelectedShape()
 
@@ -475,19 +469,19 @@ class Canvas(QWidget):
             return lat,lon
 
 
-    def transformLatLonToPixmapCoordinates(self, lon, lat):
-        x_pic,y_pic=0.,0.
-        try:
-            bmhelper = self.parent.window().basemaphelper
-            # bm = bmhelper.bm
-            pixmap_width = self.pixmap.width()
-            pixmap_height = self.pixmap.height()
-            # for cylindrical projections ONLY
-            y_pic = pixmap_height*(1.-(lat-bmhelper.llcrnrlat)/(bmhelper.urcrnrlat - bmhelper.llcrnrlat))
-            x_pic = pixmap_width*(lon-bmhelper.llcrnrlon)/(bmhelper.urcrnrlon-bmhelper.llcrnrlon)
-        except:
-            pass
-        return x_pic,y_pic
+    # def transformLatLonToPixmapCoordinates(self, lon, lat):
+    #     x_pic,y_pic=0.,0.
+    #     try:
+    #         bmhelper = self.parent.window().basemaphelper
+    #         # bm = bmhelper.bm
+    #         pixmap_width = self.pixmap.width()
+    #         pixmap_height = self.pixmap.height()
+    #         # for cylindrical projections ONLY
+    #         y_pic = pixmap_height*(1.-(lat-bmhelper.llcrnrlat)/(bmhelper.urcrnrlat - bmhelper.llcrnrlat))
+    #         x_pic = pixmap_width*(lon-bmhelper.llcrnrlon)/(bmhelper.urcrnrlon-bmhelper.llcrnrlon)
+    #     except:
+    #         pass
+    #     return x_pic,y_pic
 
 
 
@@ -495,8 +489,10 @@ class Canvas(QWidget):
         if self.selectedShape:
             self.selectedShape.latlonPoints = []
             for pt in self.selectedShape.points:
-                latlonPt = self.transformToLatLon(pt, outputQPointF=True)
-                self.selectedShape.latlonPoints.append(latlonPt)
+                # latlonPt = self.transformToLatLon(pt, outputQPointF=True)
+                posLon, posLat = self.parent.basemaphelper.xy2latlon(pt.x(), pt.y())
+                qptLatLon = QPointF(posLon, posLat)
+                self.selectedShape.latlonPoints.append(qptLatLon)
 
 
     def offsetToCenter(self):

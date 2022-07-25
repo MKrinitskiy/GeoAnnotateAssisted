@@ -64,7 +64,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -72,7 +72,7 @@ def exec():
         try:
             basemap_args_json = request.json
         except:
-            ReportException('./logs/error.log', None)
+            ReportException('./logs/error.log')
             response = make_response('unable to process expected json containing basemap projection args')
             response.headers['ErrorDesc'] = 'BasemapArgsNotRecognized'
             return response
@@ -87,7 +87,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -114,7 +114,7 @@ def exec():
             arg_srcdata_uuid = request.args['src_data_uuid']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('source data uuid was not specified')
             response.headers['ErrorDesc'] = 'DataNotFound'
             return response
@@ -123,7 +123,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -168,7 +168,7 @@ def exec():
             arg_src_uuid = request.args['uuid']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('source data uuid was not specified')
             response.headers['ErrorDesc'] = 'UUIDnotRecognized'
             return response
@@ -177,7 +177,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -202,7 +202,7 @@ def exec():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -233,7 +233,7 @@ def data_list():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -249,44 +249,44 @@ def data_list():
             return response
     except Exception as ex:
         print(ex)
-        ReportException('./logs/error.log', ex)
+        ReportException('./logs/error.log')
         response = make_response('Unable to return source data snapshots list')
         response.headers['ErrorDesc'] = 'SourceDataSnaphotsListGenerating'
         return response
 
 
 
-@app.route('/coordinates', methods=['GET'])
-def coordinates():
-    try:
-        webapi_client_id = request.args['webapi_client_id']
-    except Exception as ex:
-        print(ex)
-        ReportException('./logs/error.log', ex)
-        response = make_response('client webapi ID was not specified')
-        response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
-        return response
-
-    try:
-        xypt_json = request.json
-        xypt = ast.literal_eval(xypt_json)
-    except:
-        ReportException('./logs/error.log', None)
-        response = make_response('unable to process expected json containing xy point coordinates')
-        response.headers['ErrorDesc'] = 'XYpointNotRecognized'
-        return response
-
-    ret_dict = {}
-    try:
-        ret = app.bmhelpers[webapi_client_id].getLatLonCoordinates(xypt)
-    except:
-        ReportException('./logs/error.log', None)
-        response = make_response('unable to determine lat-lon coordinates of the point position')
-        response.headers['ErrorDesc'] = 'LatLonCoordinatesCouldNotDetemined'
-        return response
-
-    response = jsonify(ret)
-    return response
+# @app.route('/coordinates', methods=['GET'])
+# def coordinates():
+#     try:
+#         webapi_client_id = request.args['webapi_client_id']
+#     except Exception as ex:
+#         print(ex)
+#         ReportException('./logs/error.log', ex)
+#         response = make_response('client webapi ID was not specified')
+#         response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
+#         return response
+#
+#     try:
+#         xypt_json = request.json
+#         xypt = ast.literal_eval(xypt_json)
+#     except:
+#         ReportException('./logs/error.log', None)
+#         response = make_response('unable to process expected json containing xy point coordinates')
+#         response.headers['ErrorDesc'] = 'XYpointNotRecognized'
+#         return response
+#
+#     ret_dict = {}
+#     try:
+#         ret = app.bmhelpers[webapi_client_id].getLatLonCoordinates(xypt)
+#     except:
+#         ReportException('./logs/error.log', None)
+#         response = make_response('unable to determine lat-lon coordinates of the point position')
+#         response.headers['ErrorDesc'] = 'LatLonCoordinatesCouldNotDetemined'
+#         return response
+#
+#     response = jsonify(ret)
+#     return response
 
 
 
@@ -297,7 +297,7 @@ def image():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -305,10 +305,13 @@ def image():
         dict1 = {'CVimageCombined': np.copy(app.bmhelpers[webapi_client_id].CVimageCombined)}
         for ch in channels_list:
             dict1['DataLayerImage_%s' % ch] = np.copy(app.bmhelpers[webapi_client_id].__dict__['DataLayerImage_%s' % ch])
+            dict1['DataInterpolated_%s' % ch] = np.copy(app.bmhelpers[webapi_client_id].__dict__['DataInterpolated_%s' % ch])
+
         dict1['lats_proj'] = np.copy(app.bmhelpers[webapi_client_id].projection_grid['lats_proj'])
         dict1['lons_proj'] = np.copy(app.bmhelpers[webapi_client_id].projection_grid['lons_proj'])
 
         dict1['BasemapLayerImage'] = np.copy(app.bmhelpers[webapi_client_id].__dict__['BasemapLayerImage'])
+
         # dict1['llcrnrlon'] = app.bmhelpers[webapi_client_id].llcrnrlon
         # dict1['llcrnrlat'] = app.bmhelpers[webapi_client_id].llcrnrlat
         # dict1['urcrnrlon'] = app.bmhelpers[webapi_client_id].urcrnrlon
@@ -317,6 +320,7 @@ def image():
         # dict1['cLon'] = app.bmhelpers[webapi_client_id].cLon
         # dict1['LathalfRange'] = app.bmhelpers[webapi_client_id].LathalfRange
         # dict1['LonHalfRange'] = app.bmhelpers[webapi_client_id].LonHalfRange
+
         dict1['dataToPlot'] = app.bmhelpers[webapi_client_id].dataToPlot
 
 
@@ -329,7 +333,7 @@ def image():
         return response
     except Exception as ex:
         print(ex)
-        ReportException('./logs/error.log', ex)
+        ReportException('./logs/error.log')
         response = make_response('Unable to generate basemap image')
         response.headers['ErrorDesc'] = 'BasemapImageGenerating'
         return response
@@ -343,7 +347,7 @@ def predictions():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -358,7 +362,7 @@ def predictions():
         return response
     except Exception as ex:
         print(ex)
-        ReportException('./logs/error.log', ex)
+        ReportException('./logs/error.log')
         response = make_response('Unable to predict MCS labels')
         response.headers['ErrorDesc'] = 'MCSLabelsPredicting'
         return response
@@ -372,7 +376,7 @@ def imdone():
             webapi_client_id = request.args['webapi_client_id']
         except Exception as ex:
             print(ex)
-            ReportException('./logs/error.log', ex)
+            ReportException('./logs/error.log')
             response = make_response('client webapi ID was not specified')
             response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
             return response
@@ -384,7 +388,7 @@ def imdone():
         return response
     except Exception as ex:
         print(ex)
-        ReportException('./logs/error.log', ex)
+        ReportException('./logs/error.log')
         response = make_response('SetNewLatLonLimits: UnknownError')
         response.headers['ErrorDesc'] = 'UnknownError'
         return response
