@@ -59,7 +59,7 @@ class MainWindow(QMainWindow):
                 basemap_args_json = f.read()
             self.basemap_args = ast.literal_eval(basemap_args_json)
         except:
-            basemap_args_json = '{"projection": "cyl", "llcrnrlat": 35.0, "urcrnrlat": 75.0, "llcrnrlon": 7.0, "urcrnrlon": 100.0}'
+            basemap_args_json = '{"width": 5500000, "height": 4500000, "rsphere": [6378137.0, 6356752.3142], "resolution": "l", "area_thresh": 1000.0, "projection": "lcc", "lat_1": 45.0, "lat_2": 65.0, "lat_0": 60.0, "lon_0": 35.0}'
             self.basemap_args = ast.literal_eval(basemap_args_json)
 
 
@@ -623,9 +623,9 @@ class MainWindow(QMainWindow):
 
     def setClean(self):
         self.dirty = False
-        # self.actions.save.setEnabled(False)
-        # self.actions.create.setEnabled(True)
         self.actions.createMode.setEnabled(True)
+        self.app.restoreOverrideCursor()
+
 
 
     def toggleActions(self, value=True):
@@ -1083,7 +1083,6 @@ class MainWindow(QMainWindow):
     # Callback functions:
     def newShapeCallback(self):
         """Pop-up and give focus to the label editor.
-
         position MUST be in global coordinates.
         """
         if not self.useDefaultLabelCheckbox.isChecked() or not self.defaultLabelTextLine.text():
@@ -1111,6 +1110,7 @@ class MainWindow(QMainWindow):
             #     self.canvas.setEditing(True)
             #     self.actions.create.setEnabled(True)
             # else:
+            self.canvas.setEditing(True)
             self.actions.editMode.setEnabled(True)
             self.setDirty()
 
