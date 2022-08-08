@@ -16,7 +16,7 @@ def parse_args(args):
                                 MCS - mesoscale convective systems; \n
                                 MC (a.k.a. PL) - mesoscale cyclones, polar lows""")
 
-    parser.add_argument('--proj-json-settings', '-p', dest='proj_json_settings_fname', type=str,
+    parser.add_argument('--proj-json-settings', '-j', dest='proj_json_settings_fname', type=str,
                         default='./settings/projection_METEOSAT.json',
                         help="""JSON-file with exported dict containing basemap settings (resolution, projection \n
                                 arguments, etc. - see mpl_toolkits.basemap.Basemap help)""")
@@ -24,6 +24,9 @@ def parse_args(args):
     parser.add_argument('--comm-debug', '-d', dest='comm_debug', action="store_true",
                         help="""The switch rules whether the app should dump everything sent and received to/from
                                 server for debug purposes.""")
+
+    parser.add_argument('--port', '-p', dest='port', type=int, default=1999,
+                        help='''Server-side port to connect to.''')
 
     return preprocess_args(parser.parse_args(args))
 

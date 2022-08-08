@@ -124,7 +124,7 @@ class TrackingBasemapHelperClass:
 
 
     def send_close_signal(self):
-        url1 = 'http://%s:1999/imdone?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        url1 = 'http://%s:%d/imdone?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
         try:
             if self.app_args.http_logging:
                 logging.info(url1)
@@ -145,8 +145,9 @@ class TrackingBasemapHelperClass:
 
 
     def initiate(self, basemap_args: dict = None):
-        url = 'http://%s:1999/exec?command=createbmhelper&webapi_client_id=%s' % (self.remotehost,
-                                                                                  self.webapi_client_id)
+        url = 'http://%s:%d/exec?command=createbmhelper&webapi_client_id=%s' % (self.remotehost,
+                                                                                self.app_args.port,
+                                                                                self.webapi_client_id)
         try:
             req = requests.get(url, json=json.dumps(basemap_args))
             # req = requests.get(url, stream=True)
@@ -177,11 +178,12 @@ class TrackingBasemapHelperClass:
                                  dt_start: datetime.datetime = datetime.datetime(1970, 1, 1, 0, 0, 0),
                                  dt_end: datetime.datetime = datetime.datetime(2101, 1, 1, 0, 0, 0)):
 
-        url1 = 'http://%s:1999/exec?command=listData&webapi_client_id=%s&dt_start=%s&dt_end=%s' % (self.remotehost,
-                                                                                                   self.webapi_client_id,
-                                                                                                   datetime.datetime.strftime(dt_start, '%Y-%m-%d-%H-%M-%S'),
-                                                                                                   datetime.datetime.strftime(dt_end, '%Y-%m-%d-%H-%M-%S'))
-        url2 = 'http://%s:1999/datalist?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        url1 = 'http://%s:%d/exec?command=listData&webapi_client_id=%s&dt_start=%s&dt_end=%s' % (self.remotehost,
+                                                                                                 self.app_args.port,
+                                                                                                 self.webapi_client_id,
+                                                                                                 datetime.datetime.strftime(dt_start, '%Y-%m-%d-%H-%M-%S'),
+                                                                                                 datetime.datetime.strftime(dt_end, '%Y-%m-%d-%H-%M-%S'))
+        url2 = 'http://%s:%d/datalist?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
 
         try:
             req1 = requests.get(url1, stream=True)
@@ -242,7 +244,7 @@ class TrackingBasemapHelperClass:
 
 
     def RequestPreparedImages(self, resolution = 'c', calculateLatLonLimits=True):
-        url = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        url = 'http://%s:%d/images?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
         try:
             req = requests.get(url)
             if self.app_args.http_logging:
@@ -278,8 +280,8 @@ class TrackingBasemapHelperClass:
 
 
     def SetNewLatLonLimits(self, llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, resolution='c'):
-        url1 = 'http://%s:1999/exec?command=SetNewLatLonLimits&llcrnrlon=%.5f&llcrnrlat=%.5f&urcrnrlon=%.5f&urcrnrlat=%.5f&resolution=%s&webapi_client_id=%s' % (self.remotehost, llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, resolution, self.webapi_client_id)
-        url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        url1 = 'http://%s:%d/exec?command=SetNewLatLonLimits&llcrnrlon=%.5f&llcrnrlat=%.5f&urcrnrlon=%.5f&urcrnrlat=%.5f&resolution=%s&webapi_client_id=%s' % (self.remotehost, self.app_args.port, llcrnrlon, llcrnrlat, urcrnrlon, urcrnrlat, resolution, self.webapi_client_id)
+        url2 = 'http://%s:%d/images?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
         try:
             req1 = requests.get(url1, stream=True)
             if self.app_args.http_logging:
@@ -333,8 +335,8 @@ class TrackingBasemapHelperClass:
     def SwitchSourceData(self, uuid):
         self.dataSourceUUID = uuid
 
-        url1 = 'http://%s:1999/exec?command=SwitchSourceData&uuid=%s&webapi_client_id=%s' % (self.remotehost, uuid, self.webapi_client_id)
-        url2 = 'http://%s:1999/images?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        url1 = 'http://%s:%d/exec?command=SwitchSourceData&uuid=%s&webapi_client_id=%s' % (self.remotehost, self.app_args.port, uuid, self.webapi_client_id)
+        url2 = 'http://%s:%d/images?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
         try:
             req1 = requests.get(url1, stream=True)
             if self.app_args.http_logging:
@@ -382,8 +384,8 @@ class TrackingBasemapHelperClass:
                     raise Exception('Generated images transfer failed.')
 
     def RequestPredictedMCSlabels(self):
-        url1 = 'http://%s:1999/exec?command=PredictMCScurrentData&webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
-        url2 = 'http://%s:1999/predictions?webapi_client_id=%s' % (self.remotehost, self.webapi_client_id)
+        url1 = 'http://%s:%d/exec?command=PredictMCScurrentData&webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
+        url2 = 'http://%s:%d/predictions?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
         try:
             req1 = requests.get(url1, stream=True)
             if self.app_args.http_logging:
