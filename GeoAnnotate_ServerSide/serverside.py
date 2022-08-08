@@ -27,23 +27,17 @@ args = sys.argv[1:]
 args = parse_args(args)
 if not args.no_cnn:
     from libs.CNNPredictor import CNNPredictor
-
-
 if 'gpu' in args.__dict__.keys():
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
 
-app = FlaskExtended(__name__)
+
+
+app = FlaskExtended(__name__, launch_args = args)
 app.config['SECRET_KEY'] = binascii.hexlify(os.urandom(24))
 
 logging.basicConfig(filename='./logs/app.log', level=logging.INFO, format='%(asctime)s %(message)s')
 logging.info('Started AI-assisted GeoAnnotate server-side app')
 logging.info('args: %s' % sys.argv[1:])
-
-
-tmp_imag_dir = os.path.join(os.getcwd(), 'tmp')
-src_data_dir = os.path.join(os.getcwd(), 'src_data')
-channels_list = ['ch9', 'ch5', 'ch5_ch9']
-
 
 
 @app.route('/')
@@ -109,60 +103,6 @@ def exec():
                                                             webapi_client_id=webapi_client_id),
                         mimetype='text/stream')
 
-    elif command == 'processDataSnapshot':
-        try:
-            arg_srcdata_uuid = request.args['src_data_uuid']
-        except Exception as ex:
-            print(ex)
-            ReportException('./logs/error.log')
-            response = make_response('source data uuid was not specified')
-            response.headers['ErrorDesc'] = 'DataNotFound'
-            return response
-
-        try:
-            webapi_client_id = request.args['webapi_client_id']
-        except Exception as ex:
-            print(ex)
-            ReportException('./logs/error.log')
-            response = make_response('client webapi ID was not specified')
-            response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
-            return response
-
-        try:
-            calculateLatLonLimits = request.args['calculateLatLonLimits']
-            calculateLatLonLimits = True if (calculateLatLonLimits.lower() == 'true') else False
-        except:
-            calculateLatLonLimits = True
-
-        try:
-            resolution = request.args['resolution']
-        except:
-            resolution = 'f'
-
-        datetime_fname_stamp = os.path.splitext(os.path.basename(arg_src_fname))[0][-14:]
-        sat_name = os.path.splitext(os.path.basename(arg_src_fname))[0][-33:-29]
-        found_fnames = [f for f in find_files('./src_data/', '*%s*%s.nc' % (sat_name, datetime_fname_stamp))]
-        if len(found_fnames) == 0:
-            ReportError('./logs/app.err.log', webapi_client_id, 'FileNotFound', arg_src_fname)
-            response = make_response('Unable to find file %s' % arg_src_fname)
-            response.headers['ErrorDesc'] = 'FileNotFound'
-            return response
-        else:
-            curr_fname = found_fnames[0]
-
-        if not DoesPathExistAndIsFile(curr_fname):
-            response = make_response('Unable to find file %s' % arg_src_fname)
-            response.headers['ErrorDesc'] = 'FileNotFound'
-            return response
-        else:
-            return Response(MakeTrackingBasemapHelper_progress(curr_fname,
-                                                               calculateLatLonLimits,
-                                                               resolution,
-                                                               webapi_client_id=webapi_client_id),
-                            mimetype='text/stream')
-
-
-
     elif command == 'SwitchSourceData':
         try:
             arg_src_uuid = request.args['uuid']
@@ -213,13 +153,12 @@ def exec():
             response.headers['ErrorDesc'] = 'DataNotLoaded'
             return response
 
-        if args.no_cnn:
+        if app.args.no_cnn:
             response = make_response('CNN functionality is turned off for this service.')
             response.headers['ErrorDesc'] = 'CNNturnedOFF'
             return response
         else:
             return Response(PredictMCS_progress(app,
-                                                args,
                                                 app.bmhelpers[webapi_client_id].dataSourceFile,
                                                 webapi_client_id=webapi_client_id),
                             mimetype='text/stream')
@@ -256,40 +195,6 @@ def data_list():
 
 
 
-# @app.route('/coordinates', methods=['GET'])
-# def coordinates():
-#     try:
-#         webapi_client_id = request.args['webapi_client_id']
-#     except Exception as ex:
-#         print(ex)
-#         ReportException('./logs/error.log', ex)
-#         response = make_response('client webapi ID was not specified')
-#         response.headers['ErrorDesc'] = 'ClientIDnotSpecified'
-#         return response
-#
-#     try:
-#         xypt_json = request.json
-#         xypt = ast.literal_eval(xypt_json)
-#     except:
-#         ReportException('./logs/error.log', None)
-#         response = make_response('unable to process expected json containing xy point coordinates')
-#         response.headers['ErrorDesc'] = 'XYpointNotRecognized'
-#         return response
-#
-#     ret_dict = {}
-#     try:
-#         ret = app.bmhelpers[webapi_client_id].getLatLonCoordinates(xypt)
-#     except:
-#         ReportException('./logs/error.log', None)
-#         response = make_response('unable to determine lat-lon coordinates of the point position')
-#         response.headers['ErrorDesc'] = 'LatLonCoordinatesCouldNotDetemined'
-#         return response
-#
-#     response = jsonify(ret)
-#     return response
-
-
-
 @app.route('/images', methods=['GET'])
 def image():
     try:
@@ -303,25 +208,14 @@ def image():
             return response
 
         dict1 = {'CVimageCombined': np.copy(app.bmhelpers[webapi_client_id].CVimageCombined)}
-        for ch in channels_list:
-            dict1['DataLayerImage_%s' % ch] = np.copy(app.bmhelpers[webapi_client_id].__dict__['DataLayerImage_%s' % ch])
-            dict1['DataInterpolated_%s' % ch] = np.copy(app.bmhelpers[webapi_client_id].__dict__['DataInterpolated_%s' % ch])
+        for ch in app.bmhelpers[webapi_client_id].channelNames:
+            dict1['DataLayerImage_%s' % ch] = np.copy(app.bmhelpers[webapi_client_id].DataLayerImage[ch])
+            dict1['DataInterpolated_%s' % ch] = np.copy(app.bmhelpers[webapi_client_id].DataInterpolated[ch])
 
         dict1['lats_proj'] = np.copy(app.bmhelpers[webapi_client_id].projection_grid['lats_proj'])
         dict1['lons_proj'] = np.copy(app.bmhelpers[webapi_client_id].projection_grid['lons_proj'])
-
-        dict1['BasemapLayerImage'] = np.copy(app.bmhelpers[webapi_client_id].__dict__['BasemapLayerImage'])
-
-        # dict1['llcrnrlon'] = app.bmhelpers[webapi_client_id].llcrnrlon
-        # dict1['llcrnrlat'] = app.bmhelpers[webapi_client_id].llcrnrlat
-        # dict1['urcrnrlon'] = app.bmhelpers[webapi_client_id].urcrnrlon
-        # dict1['urcrnrlat'] = app.bmhelpers[webapi_client_id].urcrnrlat
-        # dict1['cLat'] = app.bmhelpers[webapi_client_id].cLat
-        # dict1['cLon'] = app.bmhelpers[webapi_client_id].cLon
-        # dict1['LathalfRange'] = app.bmhelpers[webapi_client_id].LathalfRange
-        # dict1['LonHalfRange'] = app.bmhelpers[webapi_client_id].LonHalfRange
-
-        dict1['dataToPlot'] = app.bmhelpers[webapi_client_id].dataToPlot
+        dict1['BasemapLayerImage'] = np.copy(app.bmhelpers[webapi_client_id].BasemapLayerImage)
+        dict1['currentChannel'] = app.bmhelpers[webapi_client_id].currentChannel
 
 
         tmp_fname = './cache/webapi_cache/basemap-plot-%s.pickle' % binascii.hexlify(os.urandom(5)).decode('ascii')

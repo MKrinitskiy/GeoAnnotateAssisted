@@ -52,9 +52,9 @@ class DatabaseOps():
 
 
     @classmethod
-    def read_tracks_by_datetime(cls, db_fname, dt, queries_collection):
-        dt_start = dt + timedelta(minutes=-30)
-        dt_end = dt + timedelta(minutes=30)
+    def read_tracks_by_datetime(cls, db_fname, dt, queries_collection, time_tol_minutes=30):
+        dt_start = dt + timedelta(minutes=-time_tol_minutes)
+        dt_end = dt + timedelta(minutes=time_tol_minutes)
         sqlite_query = queries_collection.SELECT_TRACKS_BY_DATETIME_RANGE_QUERY_TEXT % (datetime.strftime(dt_start, DATETIME_FORMAT_STRING),
                                                                                         datetime.strftime(dt_end, DATETIME_FORMAT_STRING))
         try:

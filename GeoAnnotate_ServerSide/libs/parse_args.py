@@ -19,6 +19,10 @@ def parse_args(args):
                         default='./.cache',
                         help="""Directory containing pre-computed projection and interpolation constants """)
 
+    parser.add_argument('--data-type', dest='data_type', type=str,
+                        default='METEOSAT-MCS', choices = ['METEOSAT-MCS', 'NAAD-PL'],
+                        help="""Directory containing pre-computed projection and interpolation constants """)
+
     cnn_choice_group = parser.add_mutually_exclusive_group()
     cnn_choice_group.add_argument('--no-cnn', dest='no_cnn', action='store_true',
                                   help='turns off the CNN prediction capability')

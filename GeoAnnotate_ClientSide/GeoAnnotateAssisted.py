@@ -410,7 +410,7 @@ class MainWindow(QMainWindow):
                               fileMenuActions=(listServersideDataAction, resetAll, quit),
                               editMenu=(edit, delete, None),
                               tools = (),
-                              context=(createMode, editMode, edit, delete, shapeLineColor, shapeFillColor),
+                              context=(createMode, editMode, edit, delete, start_track, continue_track),
                               onLoadActive=(createMode, editMode),
                               onShapesPresent=(hideAll, showAll),
                               switchDataChannel=switchDataChannel)
@@ -817,11 +817,16 @@ class MainWindow(QMainWindow):
 
 
     def fileitemDoubleClicked(self, item=None):
-        # pattern = r'.+| uuid:(.+) |.+'
-        pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| (MSG\d) \| uuid:(.+) \|.+\.nc'
         selected_str = ustr(item.text())
+        if args.labels_type == 'MCS':
+            pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| (MSG\d) \| uuid:(.+) \|.+\.nc'
+            uuid_group_No = 7
+        elif args.labels_type in ['PL', 'MC']:
+            pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+) \|.+\.nc'
+            uuid_group_No = 6
+
         m = re.match(pattern, selected_str)
-        curr_uuid = m.groups()[7]
+        curr_uuid = m.groups()[uuid_group_No]
         item.setSelected(True)
         self.loadFile(curr_uuid)
 
@@ -945,7 +950,12 @@ class MainWindow(QMainWindow):
 
 
     def loadTracks(self):
-        tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt, self.queries_collection)
+        if (args.labels_type == 'MCS'):
+            time_tolerance_minutes = 30
+        elif (args.labels_type in ['MC', 'PL']):
+            time_tolerance_minutes = 3*60+1
+
+        tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt, self.queries_collection, time_tol_minutes = time_tolerance_minutes)
         if tracks_from_db and len(tracks_from_db) > 0:
             columns = ['track_uid', 'track_human_readable_name', 'label_id', 'label_uid', 'label_dt', 'label_name']
             for i in range(self.shapes_points_count):
@@ -1242,7 +1252,7 @@ class MainWindow(QMainWindow):
         newChannel = self.basemaphelper.cycleChannel(perform=True)
         self.status('channel switched to %s' % newChannel)
         self.actions.switchDataChannel.setChecked(False)
-        self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
+        self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.currentChannel])
 
         self.imageData = self.basemaphelper.CVimageCombined
         self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
@@ -1321,7 +1331,7 @@ class MainWindow(QMainWindow):
 
         self.imageData = self.basemaphelper.CVimageCombined
         self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
-        self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
+        self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.currentChannel])
         image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
 
         self.image = image
@@ -1370,7 +1380,7 @@ class MainWindow(QMainWindow):
 
         self.imageData = self.basemaphelper.CVimageCombined
         self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
-        self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.dataToPlot])
+        self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.currentChannel])
 
         height, width, channel = self.basemaphelper.CVimageCombined.shape
         bytesPerLine = 3 * width
@@ -1484,7 +1494,8 @@ class MainWindow(QMainWindow):
     def ListServersideDataSnapshots(self, _value=False):
         self.basemaphelper.RequestDataSnapshotsList(self.start_dt, self.end_dt)
 
-        self.importServersideDataSnapshotsList(self.basemaphelper.srvSourceDataList)
+        if self.basemaphelper.srvSourceDataList is not None:
+            self.importServersideDataSnapshotsList(self.basemaphelper.srvSourceDataList)
 
 
     def startDateEdit_dateChanged(self):
@@ -1500,9 +1511,13 @@ class MainWindow(QMainWindow):
         self.fileListWidget.clear()
         # srvSourceDataList should be Pandas.DataFrame
         for idx,row in srvSourceDataList.iterrows():
-            item_str = '%s | %s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['MSG_label'], row['uuid'], os.path.basename(row['full_fname']))
+            if args.labels_type == 'MCS':
+                item_str = '%s | %s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['MSG_label'], row['uuid'], os.path.basename(row['full_fname']))
+            elif args.labels_type in ['PL', 'MC']:
+                item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
             item = QListWidgetItem(item_str)
             self.fileListWidget.addItem(item)
+
 
 
     def openPrevImg(self, _value=False):

@@ -34,3 +34,15 @@ norm_constants.ch9_thresh = 240.
 norm_constants.btd_vmin = -80.
 norm_constants.btd_vmax = 5.5
 norm_constants.btd_thresh = 0.
+
+norm_constants.msl_vmin = 950.
+norm_constants.msl_vmax = 1100.
+norm_constants.msl_thresh = norm_constants.msl_vmin
+
+norm_constants.wvp_vmin = 0.
+norm_constants.wvp_vmax = 100.
+norm_constants.wvp_thresh = norm_constants.wvp_vmin
+
+norm_constants.wsp_vmin = 0.
+norm_constants.wsp_vmax = 40.
+norm_constants.wsp_thresh = norm_constants.wsp_vmin

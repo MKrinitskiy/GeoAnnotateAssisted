@@ -24,7 +24,7 @@ def MakeTrackingBasemapHelper_progress(app: FlaskExtended,
         print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
 
         if step == 0:
-            app.bmhelpers[webapi_client_id] = TrackingBasemapHelperClass()
+            app.bmhelpers[webapi_client_id] = TrackingBasemapHelperClass(app)
         elif step == 1:
             app.bmhelpers[webapi_client_id].createBasemapObj(basemap_args_json)
             yield 'READY\n'
@@ -144,7 +144,7 @@ def SwitchSourceData_progress(app: FlaskExtended,
         elif step == 1:
             app.bmhelpers[webapi_client_id].PlotBasemapBackground()
         elif step == 2:
-            app.bmhelpers[webapi_client_id].PlotDataLayer(debug=False)
+            app.bmhelpers[webapi_client_id].PlotDataLayer()
             ### DEBUG ###
             # for dataname in app.bmhelper.channelNames:
             #     app.bmhelper.__dict__['DataLayerImage_%s' % dataname] = np.copy(app.bmhelper.BasemapLayerImage)
@@ -195,7 +195,7 @@ def SetNewLatLonLimits_progress(app: FlaskExtended,
         elif step == 2:
             app.bmhelpers[webapi_client_id].PlotBasemapBackground()
         elif step == 3:
-            app.bmhelpers[webapi_client_id].PlotDataLayer(debug=False)
+            app.bmhelpers[webapi_client_id].PlotDataLayer()
             ### DEBUG ###
             # for dataname in app.bmhelper.channelNames:
             #     app.bmhelper.__dict__['DataLayerImage_%s' % dataname] = np.copy(app.bmhelper.BasemapLayerImage)
@@ -211,10 +211,9 @@ def SetNewLatLonLimits_progress(app: FlaskExtended,
 
 
 def PredictMCS_progress(app: FlaskExtended,
-                        args,
                         curr_fname: str,
                         webapi_client_id: str = ''):
-    if not args.no_cnn:
+    if not app.args.no_cnn:
         from libs.CNNPredictor import CNNPredictor
 
     if webapi_client_id == '':
@@ -241,7 +240,7 @@ def PredictMCS_progress(app: FlaskExtended,
 
         if step == 0:
             if app.cnn is None:
-                app.cnn = CNNPredictor(args)
+                app.cnn = CNNPredictor(app.args)
             else:
                 pass
         elif step == 1:

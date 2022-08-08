@@ -21,75 +21,8 @@ import ast
 from common.BasemapFrame import *
 from libs.settings import Settings
 from types import SimpleNamespace
+from itertools import cycle
 
-
-
-### TODO: remove if not needed
-# basemaps_pickled_list_csvfile = './cache/basemaps_pickled_list.csv'
-
-# C1 = 1.19104e-5 # mWm−2 sr−1 (cm−1)4
-# C2 = 1.43877 # K (cm−1)−1
-
-'''
-from Jean-Claude Thelen and John M. Edwards, "Short-wave radiances: comparison between SEVIRI and the Unified Model"
-Q. J. R. Meteorol. Soc. 139: 1665–1679, July 2013 B
-DOI:10.1002/qj.2034
-
-| Channel | Band    |    A    |   B   |
---------------------------------------
-4         | IR 3.9  | 0.9959  | 3.471 |
-5         | WV 6.2  | 0.9963  | 2.219 |
-6         | WV 7.3  | 0.9991  | 0.485 |
-7         | IR 8.7  | 0.9996  | 0.181 |
-8         | IR 9.7  | 0.9999  | 0.060 |
-9         | IR 10.8 | 0.9983  | 0.627 |
-10        | IR 12.0 | 0.9988  | 0.397 |
-11        | IR 13.4 | 0.9981  | 0.576 |
-
-
-
-Channel | Band     | λcen   | λmin  | λmax  |
----------------------------------------------
-1       | VIS 0.6  | 0.635  | 0.56  | 0.71  |
-2       | VIS 0.8  | 0.810  | 0.74  | 0.88  |
-3       | NIR 1.6  | 1.640  | 1.50  | 1.78  |
-4       | IR 3.9   | 3.900  | 3.48  | 4.36  |
-5       | WV 6.2   | 6.250  | 5.35  | 7.15  |
-6       | WV 7.3   | 7.350  | 6.85  | 7.85  |
-7       | IR 8.7   | 8.700  | 8.30  | 9.10  |
-8       | IR 9.7   | 9.660  | 9.38  | 9.94  |
-9       | IR 10.8  | 10.800 | 9.80  | 11.80 |
-10      | IR 12.0  | 12.000 | 11.00 | 12.00 |
-11      | IR 13.4  | 13.400 | 12.40 | 14.40 |
-12      | HRV      | —     | 0.40  | 1.10  |
-
-'''
-# A_values = {'ch4': 0.9915,
-#             'ch5': 0.9960,
-#             'ch6': 0.9991,
-#             'ch7': 0.9996,
-#             'ch8': 0.9999,
-#             'ch9': 0.9983,
-#             'ch10':0.9988,
-#             'ch11':0.9982}
-#
-# B_values = {'ch4': 2.9002,
-#             'ch5': 2.0337,
-#             'ch6': 0.4340,
-#             'ch7': 0.1714,
-#             'ch8': 0.0527,
-#             'ch9': 0.6084,
-#             'ch10':0.3882,
-#             'ch11':0.5390}
-#
-# nu_central = {'ch4': 2547.771 ,
-#              'ch5':  1595.621 ,
-#              'ch6':  1360.377 ,
-#              'ch7':  1148.130 ,
-#              'ch8':  1034.715 ,
-#              'ch9':  929.842 ,
-#              'ch10': 838.659 ,
-#              'ch11': 750.653 }
 
 
 class TrackingBasemapHelperClass:
@@ -109,30 +42,31 @@ class TrackingBasemapHelperClass:
         self.urcrnrlat = None
         self.BasemapLayerImage = None
         self.CVimageCombined = None
-        self.dataToPlot = 'ch9'
+
         self.webapi_client_id = binascii.hexlify(os.urandom(24)).decode("utf-8")
 
         self.remotehost = 'localhost'
 
-        self.channelsDescriptions = {'ch9': 'ch9: 10.8 micron',
-                                     'ch5': 'ch5: 6.2 micron',
-                                     'ch5_ch9': 'ch5 - ch9',
-                                     'lat': 'latitudes',
-                                     'lon': 'longitudes'}
-        self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
+        if self.app_args.labels_type == 'MCS':
+            self.channelsDescriptions = {'ch9': 'ch9: 10.8 micron',
+                                         'ch5': 'ch5: 6.2 micron',
+                                         'ch5_ch9': 'ch5 - ch9',
+                                         'lat': 'latitudes',
+                                         'lon': 'longitudes'}
+            self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
+            self.channelNamesCycle = cycle(self.channelNames)
+            self.currentChannel = next(self.channelNamesCycle)
+        elif ((self.app_args.labels_type == 'PL') | (self.app_args.labels_type == 'MC')):
+            self.channelsDescriptions = {'wvp': 'wvp: integrated water vapor',
+                                         'wsp': 'wsp: 10m. wind speed',
+                                         'lat': 'latitudes',
+                                         'lon': 'longitudes'}
+            self.channelNames = ['wvp', 'wsp']
+            self.channelNamesCycle = cycle(self.channelNames)
+            self.currentChannel = next(self.channelNamesCycle)
         self.lons_proj = None
         self.lats_proj = None
 
-
-    # def ComputeCenterAndRange(self):
-    #     self.cLat = (self.urcrnrlat + self.llcrnrlat) * 0.5
-    #     self.LathalfRange = (self.urcrnrlat - self.llcrnrlat) * 0.5
-    #     self.cLon = (self.urcrnrlon + self.llcrnrlon) * 0.5
-    #     self.LonHalfRange = (self.lons_re.max() - self.lons_re.min()) * 0.5
-    #     self.llcrnrlon = self.cLon - self.LonHalfRange * 1.05
-    #     self.llcrnrlat = self.cLat - self.LathalfRange * 1.05
-    #     self.urcrnrlon = self.cLon + self.LonHalfRange * 1.05
-    #     self.urcrnrlat = self.cLat + self.LathalfRange * 1.05
 
 
     def deflate_recieved_dict(self, rec_dict):
@@ -141,24 +75,14 @@ class TrackingBasemapHelperClass:
         for dataname in self.channelNames:
             self.__dict__['DataLayerImage_%s' % dataname] = np.copy(rec_dict['DataLayerImage_%s' % dataname])
             self.__dict__['DataInterpolated_%s' % dataname] = np.copy(rec_dict['DataInterpolated_%s' % dataname])
-
-        # self.llcrnrlon = rec_dict['llcrnrlon']
-        # self.llcrnrlat = rec_dict['llcrnrlat']
-        # self.urcrnrlon = rec_dict['urcrnrlon']
-        # self.urcrnrlat = rec_dict['urcrnrlat']
-        # self.cLat = rec_dict['cLat']
-        # self.cLon = rec_dict['cLon']
-        # self.LathalfRange = rec_dict['LathalfRange']
-        # self.LonHalfRange = rec_dict['LonHalfRange']
-
-        self.dataToPlot = rec_dict['dataToPlot']
+        # self.currentChannel = rec_dict['currentChannel']
         self.lons_proj = rec_dict['lons_proj']
         self.lats_proj = rec_dict['lats_proj']
 
 
 
     def xy2value(self, posx: int = 0, posy: int = 0):
-        dataname = self.dataToPlot
+        dataname = self.currentChannel
 
         try:
             retVal = self.__dict__['DataInterpolated_%s' % dataname][int(np.round(self.lons_proj.shape[0]-posy)), int(np.round(posx))]
@@ -299,15 +223,18 @@ class TrackingBasemapHelperClass:
                     print('encoding detected: %s' % enc)
 
                 req_json = req.content.decode(enc)
-
-                rec_dict = ast.literal_eval(req_json)
-                rec_dict = [rec_dict[k] for k in rec_dict.keys()]
-                def convert_datetime(dct):
-                    dct['dt'] = datetime.datetime.strptime(dct['dt_str'], '%Y-%m-%d-%H-%M-%S')
-                    return dct
-                rec_dict = [convert_datetime(d) for d in rec_dict]
-                rec_dict.sort(key = lambda s: s['dt'])
-                src_data_df = pd.DataFrame(rec_dict)
+                if req_json == 'There is no data in this date/time range':
+                    rec_dict = {}
+                    src_data_df = None
+                else:
+                    rec_dict = ast.literal_eval(req_json)
+                    rec_dict = [rec_dict[k] for k in rec_dict.keys()]
+                    def convert_datetime(dct):
+                        dct['dt'] = datetime.datetime.strptime(dct['dt_str'], '%Y-%m-%d-%H-%M-%S')
+                        return dct
+                    rec_dict = [convert_datetime(d) for d in rec_dict]
+                    rec_dict.sort(key = lambda s: s['dt'])
+                    src_data_df = pd.DataFrame(rec_dict)
 
                 self.srvSourceDataList = src_data_df
 
@@ -343,9 +270,9 @@ class TrackingBasemapHelperClass:
 
 
 
-    def FuseBasemapWithData(self, alpha = 0.4, beta = 0.6):
+    def FuseBasemapWithData(self, alpha = 0.3, beta = 0.7):
         BasemapImageCV = self.BasemapLayerImage
-        DataLayerImageCV = self.__dict__['DataLayerImage_%s' % self.dataToPlot]
+        DataLayerImageCV = self.__dict__['DataLayerImage_%s' % self.currentChannel]
         self.CVimageCombined = cv2.addWeighted(BasemapImageCV, alpha, DataLayerImageCV, beta, 0.0)
 
 
@@ -509,15 +436,16 @@ class TrackingBasemapHelperClass:
 
     def cycleChannel(self, perform = True):
         newChannel = ''
-        if self.dataToPlot == 'ch9':
-            newChannel = 'ch5'
-        elif self.dataToPlot == 'ch5':
-            newChannel = 'ch5_ch9'
-        elif self.dataToPlot == 'ch5_ch9':
-            newChannel = 'ch9'
+        newChannel = next(self.channelNamesCycle)
+        # if self.currentChannel == 'ch9':
+        #     newChannel = 'ch5'
+        # elif self.currentChannel == 'ch5':
+        #     newChannel = 'ch5_ch9'
+        # elif self.currentChannel == 'ch5_ch9':
+        #     newChannel = 'ch9'
 
         if perform:
-            self.dataToPlot = newChannel
+            self.currentChannel = newChannel
             self.FuseBasemapWithData()
             return newChannel
         else:
@@ -525,7 +453,7 @@ class TrackingBasemapHelperClass:
 
 
     def getValueStr_AtCoordinates(self, posLon, posLat):
-        currData = self.__dict__['data_%s' % self.dataToPlot]
+        currData = self.__dict__['data_%s' % self.currentChannel]
         dlat = self.lats - posLat
         dlon = self.lons - posLon
         dsqr = np.square(dlat) + np.square(dlon)
