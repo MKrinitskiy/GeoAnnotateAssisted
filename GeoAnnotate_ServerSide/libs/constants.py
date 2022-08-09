@@ -26,9 +26,7 @@ norm_constants.ch5_vmax = 260.
 norm_constants.ch5_thresh = 223.
 
 norm_constants.ch9_vmin = 200.
-# norm_constants.ch9_vmin = 220.
 norm_constants.ch9_vmax = 320.
-# norm_constants.ch9_thresh = 227.
 norm_constants.ch9_thresh = 240.
 
 norm_constants.btd_vmin = -80.
@@ -40,7 +38,7 @@ norm_constants.msl_vmax = 1100.
 norm_constants.msl_thresh = norm_constants.msl_vmin
 
 norm_constants.wvp_vmin = 0.
-norm_constants.wvp_vmax = 100.
+norm_constants.wvp_vmax = 12.
 norm_constants.wvp_thresh = norm_constants.wvp_vmin
 
 norm_constants.wsp_vmin = 0.

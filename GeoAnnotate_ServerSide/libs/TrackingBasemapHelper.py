@@ -15,8 +15,9 @@ import pickle
 import uuid
 import threading
 from .colormaps import *
-from .SourceDataManagers import *
-from .SourceDataPlotters import *
+from libs.SourceDataManagers import *
+from libs.SourceDataRenderers import *
+from libs.SourceDataRenderers import *
 from hashlib import sha512
 import json
 from tempfile import NamedTemporaryFile
@@ -52,8 +53,8 @@ class TrackingBasemapHelperClass(object):
             self.channelVmin = [norm_constants.ch9_vmin, norm_constants.ch5_vmin, norm_constants.btd_vmin]
             self.channelVmax = [norm_constants.ch9_vmax, norm_constants.ch5_vmax, norm_constants.btd_vmax]
 
-            self.sourceDataManager = SourceDataManager_METEOSAT_MCS(self, baseDataDirectory = self.app.args.source_data_dir)
-            self.sourceDataPlotter = SourceDataPlotter_METEOSAT_MCS(self)
+            self.sourceDataManager = METEOSAT_MCS_DataManager(self, baseDataDirectory = self.app.args.source_data_dir)
+            self.sourceDataPlotter = METEOSAT_MCS_Renderer(self)
         elif self.app.args.data_type == 'NAAD-PL':
             self.currentChannel = 'wvp'
             # self.channelNames = ['wvp', 'wsp', 'msl']
@@ -62,8 +63,8 @@ class TrackingBasemapHelperClass(object):
             self.channelVmin = [norm_constants.wvp_vmin, norm_constants.wsp_vmin, norm_constants.msl_vmin]
             self.channelVmax = [norm_constants.wvp_vmax, norm_constants.wsp_vmax, norm_constants.msl_vmax]
 
-            self.sourceDataManager = SourceDataManager_NAAD_PL(self, baseDataDirectory = self.app.args.source_data_dir)
-            self.sourceDataPlotter = SourceDataPlotter_NAAD_PL(self)
+            self.sourceDataManager = NAAD_PL_DataManager(self, baseDataDirectory = self.app.args.source_data_dir)
+            self.sourceDataPlotter = NAAD_PL_Renderer(self)
 
 
     def ReadSourceData(self):
