@@ -1,6 +1,7 @@
 from FlaskExtended import *
 from libs.TrackingBasemapHelper import TrackingBasemapHelperClass
 import datetime
+from typing import Any
 
 
 
@@ -114,7 +115,7 @@ def ListAvailableDataSnapshots_progress(app: FlaskExtended,
 
 
 def SwitchSourceData_progress(app: FlaskExtended,
-                              curr_fname: str,
+                              curr_data_info: Any,
                               webapi_client_id: str = ''):
     if webapi_client_id == '':
         raise Exception('client ID not specified!')
@@ -139,7 +140,7 @@ def SwitchSourceData_progress(app: FlaskExtended,
         print('step %d / %d ^ %s' % (step + 1, total_steps, step_description))
 
         if step == 0:
-            app.bmhelpers[webapi_client_id].SwitchSourceData(curr_fname)
+            app.bmhelpers[webapi_client_id].SwitchSourceData(curr_data_info)
             app.bmhelpers[webapi_client_id].ReadSourceData()
         elif step == 1:
             app.bmhelpers[webapi_client_id].PlotBasemapBackground()

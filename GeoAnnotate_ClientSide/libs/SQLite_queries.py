@@ -94,7 +94,7 @@ class SQLite_Queries:
             self.UPDATE_LABEL_DATA_QUERY_TEXT = '''UPDATE labels SET dt="%s", name="%s", lon0="%s", lat0="%s", lon1="%s", lat1="%s", lon2="%s", lat2="%s" ''' + \
                                                 '''  WHERE label_uid = "%s"'''
 
-        elif ((self.label_types == 'MC') | (self.label_types == 'PL')):
+        elif ((self.label_types == 'MC') | (self.label_types == 'PL') | (self.label_types == 'AMRC')):
             self.CREATE_LABELS_TABLE_QUERY_TEXT = '''CREATE TABLE labels (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, ''' + \
                                                   '''               label_uid TEXT NOT NULL UNIQUE, ''' + \
                                                   '''               dt TEXT NOT NULL, ''' + \

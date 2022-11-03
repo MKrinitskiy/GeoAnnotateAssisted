@@ -20,7 +20,7 @@ def parse_args(args):
                         help="""Directory containing pre-computed projection and interpolation constants """)
 
     parser.add_argument('--data-type', dest='data_type', type=str,
-                        default='METEOSAT-MCS', choices = ['METEOSAT-MCS', 'NAAD-PL'],
+                        default='METEOSAT-MCS', choices = ['METEOSAT-MCS', 'NAAD-PL', 'AMRC-MC'],
                         help="""Directory containing pre-computed projection and interpolation constants """)
 
     parser.add_argument('--port', '-p', dest='port', type=int, default=1999,

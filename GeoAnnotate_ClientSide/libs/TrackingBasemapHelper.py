@@ -64,6 +64,14 @@ class TrackingBasemapHelperClass:
             self.channelNames = ['wvp', 'wsp']
             self.channelNamesCycle = cycle(self.channelNames)
             self.currentChannel = next(self.channelNamesCycle)
+        elif (self.app_args.labels_type == 'AMRC'):
+            self.channelsDescriptions = {'IR': 'IR: infrared',
+                                         'WV': 'WV: integrated water vapor',
+                                         'lat': 'latitudes',
+                                         'lon': 'longitudes'}
+            self.channelNames = ['IR', 'WV']
+            self.channelNamesCycle = cycle(self.channelNames)
+            self.currentChannel = next(self.channelNamesCycle)
         self.lons_proj = None
         self.lats_proj = None
 

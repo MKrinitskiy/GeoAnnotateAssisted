@@ -65,6 +65,16 @@ class TrackingBasemapHelperClass(object):
 
             self.sourceDataManager = NAAD_PL_DataManager(self, baseDataDirectory = self.app.args.source_data_dir)
             self.sourceDataPlotter = NAAD_PL_Renderer(self)
+        elif self.app.args.data_type == 'AMRC-MC':
+            self.currentChannel = 'IR'
+            # self.channelNames = ['IR', 'WV', 'SLP']
+            self.channelNames = ['IR', 'WV']
+            self.channelColormaps = [cm.get_cmap('jet'), cm.get_cmap('Blues')]
+            self.channelVmin = [norm_constants.IR_vmin, norm_constants.WV_vmin]
+            self.channelVmax = [norm_constants.IR_vmax, norm_constants.WV_vmax]
+
+            self.sourceDataManager = AMRC_MC_DataManager(self, baseDataDirectory=self.app.args.source_data_dir)
+            self.sourceDataPlotter = AMRC_MC_Renderer(self)
 
 
     def ReadSourceData(self):
@@ -120,8 +130,8 @@ class TrackingBasemapHelperClass(object):
                 self.interpolation_constants_cache[new_proj_sources_md5] = curr_interpolation_constants
                 self.interpolation_constants = curr_interpolation_constants
             else:
-                interpolation_inds, interpolation_wghts, interpolation_shape = interpolation_weights(self.sourceDataManager.lons.data,
-                                                                                                     self.sourceDataManager.lats.data,
+                interpolation_inds, interpolation_wghts, interpolation_shape = interpolation_weights(np.array(self.sourceDataManager.lons.data),
+                                                                                                     np.array(self.sourceDataManager.lats.data),
                                                                                                      self.projection_grid['lons_proj'],
                                                                                                      self.projection_grid['lats_proj'])
                 curr_interpolation_constants = {'interpolation_inds': interpolation_inds,
@@ -217,6 +227,6 @@ class TrackingBasemapHelperClass(object):
         self.createBasemapObj(new_proj_args_json)
 
 
-    def SwitchSourceData(self, filename):
-        self.dataSourceFile = filename
+    def SwitchSourceData(self, curr_data_info):
+        self.dataSourceFile = curr_data_info
         self.CVimageCombined = None

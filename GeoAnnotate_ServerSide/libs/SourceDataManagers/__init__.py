@@ -1,2 +1,3 @@
 from .NAAD_PL_DataManager import NAAD_PL_DataManager
 from .METEOSAT_MCS_DataManager import METEOSAT_MCS_DataManager
+from .AMRC_MC_DataManager import AMRC_MC_DataManager

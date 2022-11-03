@@ -126,13 +126,13 @@ def exec():
         data_desc_dict = sourceDataManager.uids2DataDesc[arg_src_uuid]
         curr_fname = data_desc_dict['full_fname']
 
-        if not DoesPathExistAndIsFile(curr_fname):
-            response = make_response('Unable to find file %s' % curr_fname)
+        if not DoesPathExistAndIsFile(data_desc_dict['full_fname']):
+            response = make_response('Unable to find file %s' % data_desc_dict['full_fname'])
             response.headers['ErrorDesc'] = 'FileNotFound'
             return response
         else:
             return Response(SwitchSourceData_progress(app,
-                                                      curr_fname,
+                                                      data_desc_dict,
                                                       webapi_client_id=webapi_client_id),
                             mimetype='text/stream')
 

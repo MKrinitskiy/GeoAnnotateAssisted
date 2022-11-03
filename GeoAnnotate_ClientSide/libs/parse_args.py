@@ -11,7 +11,7 @@ def parse_args(args):
                         help="""turns logging of http requests on""")
 
     parser.add_argument('--labels-type', '-t', dest='labels_type', default='MCS',
-                        choices = ['MCS', 'MC', 'PL'],
+                        choices = ['MCS', 'MC', 'PL', 'AMRC'],
                         help="""switching between types of labels: \n
                                 MCS - mesoscale convective systems; \n
                                 MC (a.k.a. PL) - mesoscale cyclones, polar lows""")

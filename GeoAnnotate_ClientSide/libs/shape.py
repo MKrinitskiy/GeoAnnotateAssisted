@@ -61,6 +61,8 @@ class Shape(object):
             self.shape_type = shape_types.ellipse
         elif ((self.label_type == 'MC') | (self.label_type == 'PL')):
             self.shape_type = shape_types.circle
+        elif (self.label_type == 'AMRC'):
+            self.shape_type = shape_types.circle
 
         self.points = []
         self.latlonPoints = []
@@ -77,6 +79,8 @@ class Shape(object):
         elif self.parent_canvas.parent.label_types == 'MC':
             self.shapes_points_count = 2
         elif self.parent_canvas.parent.label_types == 'PL':
+            self.shapes_points_count = 2
+        elif self.parent_canvas.parent.label_types == 'AMRC':
             self.shapes_points_count = 2
 
         self._highlightIndex = None

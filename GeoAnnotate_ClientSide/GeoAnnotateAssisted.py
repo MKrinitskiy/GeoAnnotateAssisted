@@ -89,6 +89,9 @@ class MainWindow(QMainWindow):
         elif self.label_types == 'PL':
             self.shapes_points_count = 2
             self.label_class = MClabel
+        elif self.label_types == 'AMRC':
+            self.shapes_points_count = 2
+            self.label_class = MClabel
 
         # Load predefined classes to the list
         self.loadPredefinedClasses(defaultPrefdefClassFile)
@@ -824,6 +827,9 @@ class MainWindow(QMainWindow):
         elif args.labels_type in ['PL', 'MC']:
             pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+) \|.+\.nc'
             uuid_group_No = 6
+        elif args.labels_type == 'AMRC':
+            pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+) \|.+\.nc'
+            uuid_group_No = 6
 
         m = re.match(pattern, selected_str)
         curr_uuid = m.groups()[uuid_group_No]
@@ -954,6 +960,8 @@ class MainWindow(QMainWindow):
             time_tolerance_minutes = 30
         elif (args.labels_type in ['MC', 'PL']):
             time_tolerance_minutes = 3*60+1
+        elif (args.labels_type == 'AMRC'):
+            time_tolerance_minutes = 3 * 60 + 1
 
         tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt, self.queries_collection, time_tol_minutes = time_tolerance_minutes)
         if tracks_from_db and len(tracks_from_db) > 0:
@@ -1342,6 +1350,8 @@ class MainWindow(QMainWindow):
             labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
         elif ((self.label_types == 'MC') | (self.label_types == 'PL')):
             labels_from_database = MClabel.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
+        elif (self.label_types == 'AMRC'):
+            labels_from_database = MClabel.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
         self.loadLabels(labels_from_database)
 
 
@@ -1492,7 +1502,10 @@ class MainWindow(QMainWindow):
 
 
     def ListServersideDataSnapshots(self, _value=False):
-        self.basemaphelper.RequestDataSnapshotsList(self.start_dt, self.end_dt)
+        try:
+            self.basemaphelper.RequestDataSnapshotsList(self.start_dt, self.end_dt)
+        except:
+            return
 
         if self.basemaphelper.srvSourceDataList is not None:
             self.importServersideDataSnapshotsList(self.basemaphelper.srvSourceDataList)
@@ -1514,6 +1527,8 @@ class MainWindow(QMainWindow):
             if args.labels_type == 'MCS':
                 item_str = '%s | %s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['MSG_label'], row['uuid'], os.path.basename(row['full_fname']))
             elif args.labels_type in ['PL', 'MC']:
+                item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
+            elif args.labels_type == 'AMRC':
                 item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
             item = QListWidgetItem(item_str)
             self.fileListWidget.addItem(item)

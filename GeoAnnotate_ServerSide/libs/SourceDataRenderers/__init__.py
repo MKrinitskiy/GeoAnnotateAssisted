@@ -1,2 +1,3 @@
 from .NAAD_PL_Renderer import NAAD_PL_Renderer
 from .METEOSAT_MCS_Renderer import METEOSAT_MCS_Renderer
+from .AMRC_MC_Renderer import AMRC_MC_Renderer
