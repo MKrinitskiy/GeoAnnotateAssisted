@@ -45,8 +45,8 @@ norm_constants.wsp_vmin = 0.
 norm_constants.wsp_vmax = 40.
 norm_constants.wsp_thresh = norm_constants.wsp_vmin
 
-norm_constants.IR_vmin = 200.
-norm_constants.IR_vmax = 310.
+norm_constants.IR_vmin = 210.
+norm_constants.IR_vmax = 285.
 norm_constants.IR_thresh = norm_constants.IR_vmin
 
 norm_constants.WV_vmin = 205.

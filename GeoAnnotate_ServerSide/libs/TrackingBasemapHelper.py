@@ -69,7 +69,7 @@ class TrackingBasemapHelperClass(object):
             self.currentChannel = 'IR'
             # self.channelNames = ['IR', 'WV', 'SLP']
             self.channelNames = ['IR', 'WV']
-            self.channelColormaps = [cm.get_cmap('jet'), cm.get_cmap('Blues')]
+            self.channelColormaps = [cm.get_cmap('Greys'), cm.get_cmap('Blues')]
             self.channelVmin = [norm_constants.IR_vmin, norm_constants.WV_vmin]
             self.channelVmax = [norm_constants.IR_vmax, norm_constants.WV_vmax]
 
