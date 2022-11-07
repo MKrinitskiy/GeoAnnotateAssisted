@@ -59,6 +59,8 @@ class AMRC_MC_DataManager(BaseDataManager):
         fnames_df_IR['dtIR_str'] = fnames_df_IR['dtIR'].apply(lambda x: datetime.datetime.strftime(x, '%Y-%m-%d-%H-%M-%S'))
         fnames_df_WV['dtWV'] = fnames_df_WV['full_fname_WV'].apply(self.dt)
         fnames_df_WV['dtWV_str'] = fnames_df_WV['dtWV'].apply(lambda x: datetime.datetime.strftime(x, '%Y-%m-%d-%H-%M-%S'))
+        fnames_df_IR.sort_values('dtIR', inplace=True)
+        fnames_df_WV.sort_values('dtWV', inplace=True)
         fnames_df = pd.merge_asof(fnames_df_IR, fnames_df_WV,
                                   left_on="dtIR",
                                   right_on='dtWV',

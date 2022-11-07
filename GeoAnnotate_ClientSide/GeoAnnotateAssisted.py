@@ -23,6 +23,10 @@ from libs.parse_args import parse_args
 from common import *
 import asyncio
 
+import os
+os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
+
+
 
 
 __appname__ = 'GeoAnnotate assisted'
