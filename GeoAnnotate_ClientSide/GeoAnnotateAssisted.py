@@ -24,7 +24,10 @@ from common import *
 import asyncio
 
 import os
-os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
+try:
+    os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
+except Exception as ex:
+    ReportException('./logs/errors.log', ex)
 
 
 
