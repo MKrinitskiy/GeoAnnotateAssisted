@@ -99,6 +99,9 @@ class MainWindow(QMainWindow):
         elif self.label_types == 'AMRC':
             self.shapes_points_count = 2
             self.label_class = MClabel
+        elif self.label_types == 'CS':
+            self.shapes_points_count = 3
+            self.label_class = MCSlabel
 
         # Load predefined classes to the list
         self.loadPredefinedClasses(defaultPrefdefClassFile)
@@ -108,6 +111,8 @@ class MainWindow(QMainWindow):
 
         self.itemsToShapes = {}
         self.shapesToItems = {}
+        self.ghosts_shapesToItems = {}
+        self.ghosts_itemsToShapes = {}
         self.prevLabelText = ''
 
         self.TrackItemsToTracks = {}
@@ -314,6 +319,9 @@ class MainWindow(QMainWindow):
 
         delete = action('Delete label', self.deleteSelectedShape,
                         'Delete', 'delete', u'Delete', enabled=False)
+
+        # duplicate_label = action('Create duplicated label', self.createDuplicatedLabel, 'Ctrl+D',
+        #                      'new dupl. label', u'Create new label duplicating this one')
 
         start_track = action('Start &new track', self.startNewTrack, 'Ctrl+N',
                              'new track', u'Creating new track starting from this label')
@@ -693,6 +701,13 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, u'Information', msg)
 
 
+
+    # def createDuplicatedLabel(self):
+    #     if self.canvas.selectedShape:
+
+
+
+
     def startNewTrack(self):
         if self.canvas.selectedShape:
             curr_label_track_data = DatabaseOps.read_tracks_by_label_uids(self.tracks_db_fname, self.queries_collection, [self.canvas.selectedShape.label.uid])
@@ -837,6 +852,9 @@ class MainWindow(QMainWindow):
         elif args.labels_type == 'AMRC':
             pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+) \|.+\.nc'
             uuid_group_No = 6
+        elif args.labels_type == 'CS':
+            pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+) \|.+\.nc'
+            uuid_group_No = 6
 
         m = re.match(pattern, selected_str)
         curr_uuid = m.groups()[uuid_group_No]
@@ -874,7 +892,10 @@ class MainWindow(QMainWindow):
         else:
             shape = self.canvas.selectedShape
             if shape:
-               self.shapesToItems[shape].setSelected(True)
+                if shape in self.shapesToItems:
+                    self.shapesToItems[shape].setSelected(True)
+                elif shape in self.ghosts_shapesToItems:
+                    self.ghosts_shapesToItems[shape].setSelected(True)
             else:
                 self.labelList.clearSelection()
         self.actions.delete.setEnabled(selected)
@@ -903,11 +924,16 @@ class MainWindow(QMainWindow):
     def remLabel(self, shape):
         if shape is None:
             return
-        item = self.shapesToItems[shape]
-        # self.labelList.takeItem(self.labelList.row(item))
-        self.labelList.takeTopLevelItem(self.labelList.indexOfTopLevelItem(item))
-        del self.shapesToItems[shape]
-        del self.itemsToShapes[item]
+        if shape in self.shapesToItems:
+            item = self.shapesToItems[shape]
+            # self.labelList.takeItem(self.labelList.row(item))
+            self.labelList.takeTopLevelItem(self.labelList.indexOfTopLevelItem(item))
+            del self.shapesToItems[shape]
+            del self.itemsToShapes[item]
+        elif shape in self.ghosts_shapesToItems:
+            item = self.ghosts_shapesToItems[shape]
+            del self.ghosts_shapesToItems[shape]
+            del self.ghosts_itemsToShapes[item]
 
 
 
@@ -969,6 +995,8 @@ class MainWindow(QMainWindow):
             time_tolerance_minutes = 3*60+1
         elif (args.labels_type == 'AMRC'):
             time_tolerance_minutes = 3 * 60 + 1
+        elif (args.labels_type == 'CS'):
+            time_tolerance_minutes = 3*60+1
 
         tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt, self.queries_collection, time_tol_minutes = time_tolerance_minutes)
         if tracks_from_db and len(tracks_from_db) > 0:
@@ -1359,6 +1387,9 @@ class MainWindow(QMainWindow):
             labels_from_database = MClabel.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
         elif (self.label_types == 'AMRC'):
             labels_from_database = MClabel.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
+        elif (self.label_types == 'CS'):
+            labels_from_database = MClabel.loadLabelsFromDatabase(self.tracks_db_fname, self.filePath)
+
         self.loadLabels(labels_from_database)
 
 
@@ -1536,6 +1567,8 @@ class MainWindow(QMainWindow):
             elif args.labels_type in ['PL', 'MC']:
                 item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
             elif args.labels_type == 'AMRC':
+                item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
+            if args.labels_type == 'CS':
                 item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
             item = QListWidgetItem(item_str)
             self.fileListWidget.addItem(item)

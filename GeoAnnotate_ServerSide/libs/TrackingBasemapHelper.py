@@ -75,6 +75,16 @@ class TrackingBasemapHelperClass(object):
 
             self.sourceDataManager = AMRC_MC_DataManager(self, baseDataDirectory=self.app.args.source_data_dir)
             self.sourceDataPlotter = AMRC_MC_Renderer(self)
+        elif self.app.args.data_type == 'NAAD-CS':
+            self.currentChannel = 'wvp'
+            # self.channelNames = ['wvp', 'wsp', 'msl']
+            self.channelNames = ['wvp', 'wsp']
+            self.channelColormaps = [cm.get_cmap('Blues'), cm.get_cmap('Reds'), cm.get_cmap('spring')]
+            self.channelVmin = [norm_constants.wvp_vmin, norm_constants.wsp_vmin, norm_constants.msl_vmin]
+            self.channelVmax = [norm_constants.wvp_vmax, norm_constants.wsp_vmax, norm_constants.msl_vmax]
+
+            self.sourceDataManager = NAAD_CS_DataManager(self, baseDataDirectory=self.app.args.source_data_dir)
+            self.sourceDataPlotter = NAAD_CS_Renderer(self)
 
 
     def ReadSourceData(self):

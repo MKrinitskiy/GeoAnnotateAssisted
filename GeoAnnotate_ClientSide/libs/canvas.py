@@ -43,6 +43,8 @@ class Canvas(QWidget):
             self.shapes_points_count = 2
         elif self.parent.label_types == 'AMRC':
             self.shapes_points_count = 2
+        elif self.parent.label_types == 'CS':
+            self.shapes_points_count = 3
 
         self.mode = self.EDIT
         self.shapes = []

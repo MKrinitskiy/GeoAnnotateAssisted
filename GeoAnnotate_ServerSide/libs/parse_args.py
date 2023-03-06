@@ -1,6 +1,7 @@
 import argparse, warnings, datetime, os
 import numpy as np
 from .service_defs import DoesPathExistAndIsFile, DoesPathExistAndIsDirectory
+import shutil
 import ast
 
 
@@ -20,8 +21,15 @@ def parse_args(args):
                         help="""Directory containing pre-computed projection and interpolation constants """)
 
     parser.add_argument('--data-type', dest='data_type', type=str,
-                        default='METEOSAT-MCS', choices = ['METEOSAT-MCS', 'NAAD-PL', 'AMRC-MC'],
-                        help="""Directory containing pre-computed projection and interpolation constants """)
+                        default='METEOSAT-MCS', choices = ['METEOSAT-MCS', 'NAAD-PL', 'AMRC-MC', 'NAAD-CS'],
+                        help="""Switching between labeling problems: \n
+                        METEOSAT-MCS - for tracking (M)esoscale (C)onvective (S)ystems 
+                        in METEOSAT remote sensing imagery; \n
+                        NAAD-PL - for tracking (M)esoscale (C)yclones (a.k.a. (P)olar (L)ows) 
+                        in NAAD atmospheric modeling data \n
+                        AMRC-MC - for tracking mesoscale cyclones or polar lows 
+                        in AMRC remote sensing mosaics in Southern ocean \n
+                        NAAD-CS - for tracking (C)oherent (Structures) in NAAD atmospheric modeling data.""")
 
     parser.add_argument('--port', '-p', dest='port', type=int, default=1999,
                         help='''Port for the server to listen to''')
@@ -59,8 +67,13 @@ def parse_args(args):
 
 
 def preprocess_args(parsed_args):
+    if not DoesPathExistAndIsDirectory(parsed_args.caches_path):
+        os.makedirs(parsed_args.caches_path)
+    if not DoesPathExistAndIsDirectory(os.path.join(os.getcwd(), 'logs')):
+        os.makedirs(os.path.join(os.getcwd(), 'logs'))
     # assert DoesPathExistAndIsFile(parsed_args.ncfiles_index), 'ncfiles_index cannot be found'
-    assert DoesPathExistAndIsDirectory(parsed_args.caches_path), 'caches_path directory cannot be found'
+    assert DoesPathExistAndIsDirectory(parsed_args.caches_path), 'caches_path directory cannot be found or created'
+    assert DoesPathExistAndIsDirectory(os.path.join(os.getcwd(), 'logs')), 'logs directory cannot be found or created'
     # assert DoesPathExistAndIsFile(parsed_args.model_snapshot), 'model_snapshot cannot be found'
     # assert DoesPathExistAndIsFile(parsed_args.classes_csv), 'classes_csv cannot be found'
     #TODO: check if interpolation constants and other pre-computed data are in the place in caches_path

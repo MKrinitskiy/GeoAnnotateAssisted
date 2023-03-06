@@ -11,10 +11,16 @@ def parse_args(args):
                         help="""turns logging of http requests on""")
 
     parser.add_argument('--labels-type', '-t', dest='labels_type', default='MCS',
-                        choices = ['MCS', 'MC', 'PL', 'AMRC'],
-                        help="""switching between types of labels: \n
-                                MCS - mesoscale convective systems; \n
-                                MC (a.k.a. PL) - mesoscale cyclones, polar lows""")
+                        choices = ['MCS', 'MC', 'PL', 'AMRC', 'CS'],
+                        help="""Switching between labeling problems: \n
+                                MCS - for tracking (M)esoscale (C)onvective (S)ystems in METEOSAT remote sensing 
+                                imagery; \n
+                                MC (a.k.a. PL) - for tracking (M)esoscale (C)yclones, (P)olar (L)ows in
+                                NAAD atmospheric modeling data \n
+                                AMRC - for tracking mesoscale cyclones or polar lows in AMRC remote sensing mosaics in
+                                Southern ocean \n
+                                CS - for tracking (C)oherent (Structures) in NAAD atmospheric modeling data.""")
+
 
     parser.add_argument('--proj-json-settings', '-j', dest='proj_json_settings_fname', type=str,
                         default='./settings/projection_METEOSAT.json',
@@ -27,6 +33,9 @@ def parse_args(args):
 
     parser.add_argument('--port', '-p', dest='port', type=int, default=1999,
                         help='''Server-side port to connect to.''')
+
+    parser.add_argument('--server', '-s', dest='remotehost', type=str, default='localhost',
+                        help='''Server host address (ip or domain name, default is "localhost").''')
 
     return preprocess_args(parser.parse_args(args))
 

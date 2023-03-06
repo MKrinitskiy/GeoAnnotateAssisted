@@ -45,7 +45,8 @@ class TrackingBasemapHelperClass:
 
         self.webapi_client_id = binascii.hexlify(os.urandom(24)).decode("utf-8")
 
-        self.remotehost = 'localhost'
+        # self.remotehost = 'localhost'
+        self.remotehost = self.app_args.remotehost
 
         if self.app_args.labels_type == 'MCS':
             self.channelsDescriptions = {'ch9': 'ch9: 10.8 micron',
@@ -70,6 +71,14 @@ class TrackingBasemapHelperClass:
                                          'lat': 'latitudes',
                                          'lon': 'longitudes'}
             self.channelNames = ['IR', 'WV']
+            self.channelNamesCycle = cycle(self.channelNames)
+            self.currentChannel = next(self.channelNamesCycle)
+        elif (self.app_args.labels_type == 'CS'):
+            self.channelsDescriptions = {'wvp': 'wvp: integrated water vapor',
+                                         'wsp': 'wsp: 10m. wind speed',
+                                         'lat': 'latitudes',
+                                         'lon': 'longitudes'}
+            self.channelNames = ['wvp', 'wsp']
             self.channelNamesCycle = cycle(self.channelNames)
             self.currentChannel = next(self.channelNamesCycle)
         self.lons_proj = None

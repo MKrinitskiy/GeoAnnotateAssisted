@@ -75,7 +75,7 @@ class SQLite_Queries:
             '''DELETE FROM labels WHERE labels.label_uid = "%s"''']
 
 
-        if self.label_types == 'MCS':
+        if ((self.label_types == 'MCS') | (self.label_types == 'CS')):
             self.CREATE_LABELS_TABLE_QUERY_TEXT = '''CREATE TABLE labels (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, ''' + \
                                                   '''               label_uid TEXT NOT NULL UNIQUE, ''' + \
                                                   '''               dt TEXT NOT NULL, ''' + \

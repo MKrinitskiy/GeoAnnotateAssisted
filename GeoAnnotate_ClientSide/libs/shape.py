@@ -63,6 +63,8 @@ class Shape(object):
             self.shape_type = shape_types.circle
         elif (self.label_type == 'AMRC'):
             self.shape_type = shape_types.circle
+        elif (self.label_type == 'CS'):
+            self.shape_type = shape_types.ellipse
 
         self.points = []
         self.latlonPoints = []
@@ -82,6 +84,8 @@ class Shape(object):
             self.shapes_points_count = 2
         elif self.parent_canvas.parent.label_types == 'AMRC':
             self.shapes_points_count = 2
+        elif self.parent_canvas.parent.label_types == 'CS':
+            self.shapes_points_count = 3
 
         self._highlightIndex = None
         self._highlightMode = self.NEAR_VERTEX
