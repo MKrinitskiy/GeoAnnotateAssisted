@@ -128,3 +128,4 @@ dmypy.json
 debug/
 dev/
 *.ipynb
+**/.GeoAnnotateSettings.pkl
