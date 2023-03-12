@@ -121,7 +121,8 @@ class METEOSAT_MCS_DataManager(BaseDataManager):
         return fnames_df_filtered.shape[0]
 
 
-    def ReadSourceData(self, dataSourceFile):
+    def ReadSourceData(self, dataItemIdentifier):
+        dataSourceFile = dataItemIdentifier
         ds1 = Dataset(dataSourceFile, 'r')
         self.lats = ds1.variables['lat'][:]
         self.lons = ds1.variables['lon'][:]

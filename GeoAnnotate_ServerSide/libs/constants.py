@@ -52,3 +52,8 @@ norm_constants.IR_thresh = norm_constants.IR_vmin
 norm_constants.WV_vmin = 205.
 norm_constants.WV_vmax = 260.
 norm_constants.WV_thresh = norm_constants.WV_vmin
+
+
+norm_constants.lambda2_vmin = 0.8
+norm_constants.lambda2_vmax = 0.5
+norm_constants.lambda2_thresh = 0.68

@@ -15,6 +15,9 @@ def parse_args(args):
     source_group.add_argument('--ncfiles-index', dest='ncfiles_index', type=str,
                         default='./src_data/METEOSAT_ncfiles_wrtAppContainer_wMetadata.pkl',
                         help="""Path to pkl file containing list of METEOSAT source data *.nc filenames with metadata pre-computed""")
+    source_group.add_argument('--source-data-file', '-f', dest='source_data_file', type=str,
+                              default='./src_data/source_data_file.nc',
+                              help='path to the *.nc file containing source data to be annotated.')
 
     parser.add_argument('--caches-path', dest='caches_path', type=str,
                         default='./.cache',
@@ -77,5 +80,11 @@ def preprocess_args(parsed_args):
     # assert DoesPathExistAndIsFile(parsed_args.model_snapshot), 'model_snapshot cannot be found'
     # assert DoesPathExistAndIsFile(parsed_args.classes_csv), 'classes_csv cannot be found'
     #TODO: check if interpolation constants and other pre-computed data are in the place in caches_path
+
+    if parsed_args.data_type == 'NAAD-CS':
+        assert DoesPathExistAndIsFile(parsed_args.source_data_file), "When one specifies the data type (--data-type " \
+                                                                     "argument) as \"NAAD-CS\", the path for source data" \
+                                                                     " file should be specified explicitly " \
+                                                                     "(--source-data-file argument)"
 
     return parsed_args

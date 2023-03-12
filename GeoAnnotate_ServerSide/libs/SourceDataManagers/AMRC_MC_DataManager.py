@@ -92,7 +92,8 @@ class AMRC_MC_DataManager(BaseDataManager):
         elif self.current_channel == 'WV':
             return self.latsWV
 
-    def ReadSourceData(self, dataSourceInfo):
+    def ReadSourceData(self, dataItemIdentifier):
+        dataSourceInfo = dataItemIdentifier
         ir_fname = dataSourceInfo['full_fname_IR']
         wv_fname = dataSourceInfo['full_fname_WV']
 

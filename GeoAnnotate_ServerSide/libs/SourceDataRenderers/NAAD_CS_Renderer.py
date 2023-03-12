@@ -22,10 +22,6 @@ class NAAD_CS_Renderer(BaseRenderer):
         self.parent.bm.fillcontinents(color=(0.95, 0.95, 0.95))
         m = self.parent.bm.drawmeridians([self.parent.sourceDataManager.lons.min() + i * (self.parent.sourceDataManager.lons.max() - self.parent.sourceDataManager.lons.min()) / 5. for i in range(6)], linewidth=0.3)
         p = self.parent.bm.drawparallels([self.parent.sourceDataManager.lats.min() + i * (self.parent.sourceDataManager.lats.max() - self.parent.sourceDataManager.lats.min()) / 5. for i in range(6)], linewidth=0.3)
-        cs = self.parent.bm.contour(self.parent.sourceDataManager.lons, self.parent.sourceDataManager.lats,
-                                    self.parent.sourceDataManager.data['msl'], latlon=True, levels=np.arange(norm_constants.msl_vmin, norm_constants.msl_vmax, 2.0),
-                                    colors='black', linewidths=0.1)
-        ax.clabel(cs, inline=True, fontsize=3)
 
         plt.axis("off")
 

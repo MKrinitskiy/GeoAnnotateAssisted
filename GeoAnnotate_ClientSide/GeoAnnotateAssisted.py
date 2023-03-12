@@ -579,8 +579,8 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.labelCoordinates)
 
         # Open Dir if deafult file
-        if self.filePath and os.path.isdir(self.filePath):
-            self.openDirDialog(dirpath=self.filePath)
+        # if self.filePath and os.path.isdir(self.filePath):
+        #     self.openDirDialog(dirpath=self.filePath)
 
 
 
@@ -682,12 +682,12 @@ class MainWindow(QMainWindow):
             return items[0]
         return None
 
-    def addRecentFile(self, filePath):
-        if filePath in self.recentFiles:
-            self.recentFiles.remove(filePath)
-        elif len(self.recentFiles) >= self.maxRecent:
-            self.recentFiles.pop()
-        self.recentFiles.insert(0, filePath)
+    # def addRecentFile(self, filePath):
+    #     if filePath in self.recentFiles:
+    #         self.recentFiles.remove(filePath)
+    #     elif len(self.recentFiles) >= self.maxRecent:
+    #         self.recentFiles.pop()
+    #     self.recentFiles.insert(0, filePath)
 
     # def beginner(self):
     #     return self._beginner
@@ -853,13 +853,14 @@ class MainWindow(QMainWindow):
             pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+) \|.+\.nc'
             uuid_group_No = 6
         elif args.labels_type == 'CS':
-            pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+) \|.+\.nc'
+            pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+)'
             uuid_group_No = 6
 
         m = re.match(pattern, selected_str)
-        curr_uuid = m.groups()[uuid_group_No]
-        item.setSelected(True)
-        self.loadFile(curr_uuid)
+        if m is not None:
+            curr_uuid = m.groups()[uuid_group_No]
+            item.setSelected(True)
+            self.loadFile(curr_uuid)
 
 
     def btnstate(self, item= None):
@@ -1182,6 +1183,7 @@ class MainWindow(QMainWindow):
             pt = {'lat': lat, 'lon': lon}
             pts['pt%d'%i] = pt
         new_shape.label.pts = pts
+
         new_shape.label.sourcedata_fname = os.path.basename(self.filePath)
         if DatabaseOps.insert_label_data(self.tracks_db_fname, new_shape.label, self.queries_collection):
             self.setClean()
@@ -1404,6 +1406,75 @@ class MainWindow(QMainWindow):
             item.setCheckState(0, Qt.Checked if value else Qt.Unchecked)
 
 
+    def loadData(self, uuid=None):
+        self.resetState()
+        self.canvas.setEnabled(False)
+        if uuid is None:
+            return
+
+        curr_srcdata_row = self.basemaphelper.srvSourceDataList[self.basemaphelper.srvSourceDataList['uuid'] == uuid].iloc[0, :]  # supposedly it will be 1-row DataFrame
+
+        self.currDataUUID = uuid
+        self.curr_dt = curr_srcdata_row['dt']
+        # self.filePath = curr_srcdata_row['full_fname']
+
+        try:
+            self.basemaphelper.SwitchSourceData(uuid)
+            self.basemaphelper.FuseBasemapWithData()
+        except:
+            ReportException('./logs/error.log', None)
+            return False
+
+        self.imageData = self.basemaphelper.CVimageCombined
+        self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
+        self.actions.switchDataChannel.setText(
+            self.basemaphelper.channelsDescriptions[self.basemaphelper.currentChannel])
+
+        height, width, channel = self.basemaphelper.CVimageCombined.shape
+        bytesPerLine = 3 * width
+        image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
+
+        self.status("Loaded data for %s with serverside-uuid: %s" % (
+        datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%S'), uuid))
+        self.image = image
+        # self.filePath = unicodeFilePath
+        self.canvas.loadPixmap(QPixmap.fromImage(image))
+
+        self.setClean()
+        self.canvas.setEnabled(True)
+        self.adjustScale(initial=True)
+        self.paintCanvas()
+        # self.addRecentFile(self.filePath)
+        self.toggleActions(True)
+
+        self.actions.refreshBasemap.setEnabled(True)
+        self.actions.zoomHires.setEnabled(True)
+        self.actions.switchDataChannel.setEnabled(True)
+
+        if args.labels_type in ['MCS', 'MC', 'PL', 'AMRC']:
+            labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname,
+                                                                           os.path.basename(self.filePath))
+        elif args.labels_type in ['CS']:
+            labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname,
+                                                                           self.curr_dt)
+        self.loadLabels(labels_from_database)
+
+        if self.settings.get(SETTING_DETECTION_USE_NEURAL_ASSISTANCE):
+            labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
+            if labels_cnn_predicted is not None:
+                self.loadPredictedLabels(labels_cnn_predicted)
+
+        self.setWindowTitle(
+            __appname__ + ' ' + "%s :uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%S'), uuid))
+
+        # Default : select last item if there is at least one item
+        if self.labelList.topLevelItemCount():
+            self.labelList.setCurrentItem(self.labelList.topLevelItem(self.labelList.topLevelItemCount() - 1))
+            self.labelList.topLevelItem(self.labelList.topLevelItemCount() - 1).setSelected(True)
+
+        self.canvas.setFocus(True)
+        return True
+
 
     def loadFile(self, uuid=None):
         self.resetState()
@@ -1569,7 +1640,7 @@ class MainWindow(QMainWindow):
             elif args.labels_type == 'AMRC':
                 item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
             if args.labels_type == 'CS':
-                item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
+                item_str = '%s | uuid:%s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'])
             item = QListWidgetItem(item_str)
             self.fileListWidget.addItem(item)
 

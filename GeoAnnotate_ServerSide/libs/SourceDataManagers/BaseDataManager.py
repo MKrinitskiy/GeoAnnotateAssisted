@@ -4,9 +4,10 @@ import datetime
 class BaseDataManager:
 
 
-    def __init__(self, parent, baseDataDirectory = './'):
+    def __init__(self, parent, baseDataDirectory = './src_data/', source_data_file = './src_data/source_data_file.nc'):
         self.parent = parent
         self.baseDataDirectory = baseDataDirectory
+        self.source_data_file = source_data_file
         self.uids2DataDesc = {}
         self.uids2datetime = {}
         self.data = {}
@@ -16,6 +17,6 @@ class BaseDataManager:
         raise NotImplementedError()
 
 
-    def ReadSourceData(self, dataSourceFile):
+    def ReadSourceData(self, dataItemIdentifier):
         raise NotImplementedError()
 
