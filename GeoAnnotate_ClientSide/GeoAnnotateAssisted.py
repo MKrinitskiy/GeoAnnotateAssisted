@@ -1514,7 +1514,7 @@ class MainWindow(QMainWindow):
         self.canvas.setEnabled(True)
         self.adjustScale(initial=True)
         self.paintCanvas()
-        self.addRecentFile(self.filePath)
+        # self.addRecentFile(self.filePath)
         self.toggleActions(True)
 
         self.actions.refreshBasemap.setEnabled(True)
