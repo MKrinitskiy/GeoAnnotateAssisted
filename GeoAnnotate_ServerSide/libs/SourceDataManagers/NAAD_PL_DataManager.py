@@ -47,7 +47,7 @@ class NAAD_PL_DataManager(BaseDataManager):
 
 
     def ReadSourceData(self, dataItemIdentifier):
-        dataSourceFile = dataItemIdentifier
+        dataSourceFile = dataItemIdentifier['full_fname']
         ds1 = Dataset(dataSourceFile, 'r')
         self.lats = ds1.variables['XLAT'][:]
         self.lons = ds1.variables['XLONG'][:]

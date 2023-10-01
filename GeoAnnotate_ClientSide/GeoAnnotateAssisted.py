@@ -1614,6 +1614,7 @@ class MainWindow(QMainWindow):
         try:
             self.basemaphelper.RequestDataSnapshotsList(self.start_dt, self.end_dt)
         except:
+            ReportException('./logs/error.log', None)
             return
 
         if self.basemaphelper.srvSourceDataList is not None:
