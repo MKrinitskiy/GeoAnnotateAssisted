@@ -99,6 +99,9 @@ class MainWindow(QMainWindow):
         elif self.label_types == 'AMRC':
             self.shapes_points_count = 2
             self.label_class = MClabel
+        elif self.label_types == 'QL':
+            self.shapes_points_count = 2
+            self.label_class = QuasiLinearLabel
         elif self.label_types == 'CS':
             self.shapes_points_count = 3
             self.label_class = MCSlabel
