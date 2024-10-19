@@ -21,7 +21,6 @@ from PyQt5.QtWidgets import *
 from libs import *
 from libs.parse_args import parse_args
 from common import *
-from libs.ui_manager import UIManager
 import asyncio
 
 import os
@@ -43,31 +42,8 @@ logging.info('Started AI-assisted GeoAnnotate client-side app')
 logging.info('args: %s' % sys.argv[1:])
 
 
-
-class FileManager:
-    def __init__(self, main_window):
-        self.main_window = main_window
-
-    def load_file(self, uuid=None):
-        # Implement file loading logic here
-        pass
-
-class DataManager:
-    def __init__(self, main_window):
-        self.main_window = main_window
-
-    def load_labels(self):
-        # Implement label loading logic here
-        pass
-
-class GeoAnnotateApp(QMainWindow):
+class MainWindow(QMainWindow):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
-
-    def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None):
-        super(GeoAnnotateApp, self).__init__()
-        self.ui_manager = UIManager(self)
-        self.file_manager = FileManager(self)
-        self.data_manager = DataManager(self)
 
     # def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None, defaultSaveDir=None):
     def __init__(self, defaultFilename=None, defaultPrefdefClassFile=None):
