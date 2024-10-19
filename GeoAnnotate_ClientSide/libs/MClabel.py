@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from common.srvMClabel import srvMClabel
 from .SQLite_queries import SQLite_Queries
+from .QuasiLinearLabel import QuasiLinearLabel
 
 
 class MClabel():
