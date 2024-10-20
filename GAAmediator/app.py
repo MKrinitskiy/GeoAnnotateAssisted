@@ -9,9 +9,8 @@ arriving_messages_queue = Queue()
 departing_reports_queue = Queue()
 
 async def main():
-    publisher_thread = start_message_publisher_thread(departing_reports_queue)
     consumer_thread = start_message_consumer_thread()
-    
+    publisher_thread = start_message_publisher_thread(departing_reports_queue)
     while True:
         try:
             # Placeholder for the main logic
