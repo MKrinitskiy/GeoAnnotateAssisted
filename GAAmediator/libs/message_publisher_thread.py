@@ -1,7 +1,7 @@
 import threading
 import logging
 from queue import Queue
-from GAAmediator.libs.async_rabbitmq_publisher import RabbitMQPublisher
+from async_rabbitmq_publisher import RabbitMQPublisher
 
 def start_message_publisher_thread(departing_reports_queue):
     """Function to start a thread for publishing messages to RabbitMQ."""
