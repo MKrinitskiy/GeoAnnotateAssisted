@@ -3,7 +3,7 @@ import logging
 from app import arriving_messages_queue
 from async_rabbitmq_consumer import ReconnectingRabbitMQConsumer
 
-def start_message_consumer_thread():
+def start_message_consumer_thread(threading_lock):
     """Function to start a thread for consuming messages from RabbitMQ."""
     threading_lock = threading.Lock()
     logger = logging.getLogger("MessageConsumer")

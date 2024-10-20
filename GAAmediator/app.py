@@ -9,9 +9,12 @@ arriving_messages_queue = Queue()
 
 departing_reports_queue = Queue()
 
+threading_lock_consumer = threading.Lock()
+threading_lock_publisher = threading.Lock()
+
 async def main():
-    consumer_thread = start_message_consumer_thread()
-    publisher_thread = start_message_publisher_thread(departing_reports_queue)
+    consumer_thread = start_message_consumer_thread(threading_lock_consumer)
+    publisher_thread = start_message_publisher_thread(departing_reports_queue, threading_lock_publisher)
     processing_thread = start_message_processing_thread(arriving_messages_queue, departing_reports_queue)
     
     while True:
