@@ -1,7 +1,6 @@
 import asyncio
 import threading
 from GAAmediator.libs.message_consumer_thread import start_message_consumer_thread
-
 from GAAmediator.libs.message_publisher_thread import start_message_publisher_thread
 from GAAmediator.libs.message_processing_thread import start_message_processing_thread
 from queue import Queue
