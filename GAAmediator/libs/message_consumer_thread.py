@@ -1,11 +1,10 @@
 import threading
 import logging
-from queue import Queue
+from GAAmediator.app import arriving_messages_queue
 from GAAmediator.libs.async_rabbitmq_consumer import ReconnectingRabbitMQConsumer
 
 def start_message_consumer_thread():
     """Function to start a thread for consuming messages from RabbitMQ."""
-    arriving_messages_queue = Queue()
     threading_lock = threading.Lock()
     logger = logging.getLogger("MessageConsumer")
 
