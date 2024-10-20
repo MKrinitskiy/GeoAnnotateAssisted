@@ -1,11 +1,15 @@
 import asyncio
 from GAAmediator.libs.message_consumer_thread import start_message_consumer_thread
 
+from GAAmediator.libs.message_publisher_thread import start_message_publisher_thread
 from queue import Queue
 
 arriving_messages_queue = Queue()
 
+departing_reports_queue = Queue()
+
 async def main():
+    publisher_thread = start_message_publisher_thread(departing_reports_queue)
     consumer_thread = start_message_consumer_thread()
     
     while True:
