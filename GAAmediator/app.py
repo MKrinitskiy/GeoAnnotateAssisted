@@ -1,6 +1,9 @@
 import asyncio
+from GAAmediator.libs.message_consumer_thread import start_message_consumer_thread
 
 async def main():
+    consumer_thread = start_message_consumer_thread()
+    
     while True:
         try:
             # Placeholder for the main logic
