@@ -1,5 +1,0 @@
-pymongo
-python-dotenv
-pika
-minio
-numpy

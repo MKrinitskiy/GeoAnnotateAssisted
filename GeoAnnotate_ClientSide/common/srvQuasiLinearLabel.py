@@ -4,31 +4,25 @@ import datetime
 
 class srvQuasiLinearLabel(object):
     def __init__(self, sourcedata_fname=''):
-        self.label_id = ''
         self.points = []
         self.uid = str(uuid.uuid4())
-        self.dt = datetime.datetime.utcnow()
-        self.start_lon = 37.556730 + np.random.randn() * 1e-2
-        self.start_lat = 55.671874 + np.random.randn() * 1e-2
-        self.end_lon = 38.0 + np.random.randn() * 1e-2
-        self.end_lat = 55.0 + np.random.randn() * 1e-2
+        self.dt = datetime.datetime.now(datetime.UTC)
         self.sourcedata_fname = sourcedata_fname
         self.probability = 0.0
+    
+    
     def calculate_length(self):
         # Implement the logic to calculate the length of the quasi-linear label
-        pass
+        if not self.points:
+            return 0
+        return len(self.points)
 
     def to_dict(self):
         # Convert the label data to a dictionary format
         return {
-            "label_id": self.label_id,
             "points": self.points,
             "uid": self.uid,
             "dt": self.dt,
-            "start_lon": self.start_lon,
-            "start_lat": self.start_lat,
-            "end_lon": self.end_lon,
-            "end_lat": self.end_lat,
             "sourcedata_fname": self.sourcedata_fname,
             "probability": self.probability
         }
@@ -37,13 +31,34 @@ class srvQuasiLinearLabel(object):
     def from_dict(data):
         # Create an srvQuasiLinearLabel instance from a dictionary
         label = srvQuasiLinearLabel(data.get("sourcedata_fname", ''))
-        label.label_id = data.get("label_id", '')
         label.points = data.get("points", [])
         label.uid = data.get("uid", str(uuid.uuid4()))
-        label.dt = data.get("dt", datetime.datetime.utcnow())
-        label.start_lon = data.get("start_lon", 37.556730 + np.random.randn() * 1e-2)
-        label.start_lat = data.get("start_lat", 55.671874 + np.random.randn() * 1e-2)
-        label.end_lon = data.get("end_lon", 38.0 + np.random.randn() * 1e-2)
-        label.end_lat = data.get("end_lat", 55.0 + np.random.randn() * 1e-2)
+        label.dt = data.get("dt",datetime.datetime.now(datetime.UTC))
         label.probability = data.get("probability", 0.0)
         return label
+
+
+
+class srvQuasiLinearLabelPoint(object):
+    def __init__(self, lon, lat):
+        self.clon = lon
+        self.clat = lat
+        self.veclon = lon + np.random.randn() * 1e-2
+        self.veclat = lat + np.random.randn() * 1e-2
+
+    def to_dict(self):
+        return {
+            "clon": self.clon,
+            "clat": self.clat,
+            "veclon": self.veclon,
+            "veclat": self.veclat,
+        }
+    
+    @staticmethod
+    def from_dict(data):
+        point = srvQuasiLinearLabelPoint(data.get("clon", 0.0), data.get("clat", 0.0))
+        point.clon = data.get("clon", 0.0)
+        point.clat = data.get("clat", 0.0)
+        point.veclon = data.get("veclon", 0.0)
+        point.veclat = data.get("veclat", 0.0)
+        return point

@@ -100,7 +100,7 @@ class MainWindow(QMainWindow):
         elif self.label_types == 'AMRC':
             self.shapes_points_count = 2
             self.label_class = MClabel
-        elif self.label_types == 'QL':
+        elif self.label_types == 'QLL':
             self.shapes_points_count = 2
             self.label_class = QuasiLinearLabel
         elif self.label_types == 'CS':
@@ -287,45 +287,21 @@ class MainWindow(QMainWindow):
         quit = action('&Quit', self.closing,
                       'Ctrl+Q', 'quit', u'Quit application')
 
-
-
-        # open = action('&Open', self.openFile,
-        #               'Ctrl+O', 'open', u'Open image or label file')
-
-        # opendir = action('&Open Dir', self.openDirDialog,
-        #                  'Ctrl+u', 'open', u'Open Dir')
-
-        # listServersideDataSnapshots = action('&List server-side\ndata files', self.ListServersideDataSnapshots, 'Ctrl+u', 'open', u'Open Dir')
-
         openNextImg = action('Next file', self.openNextImg,
                              'd', 'next', u'Open Next')
 
         openPrevImg = action('&Prev file', self.openPrevImg,
                              'a', 'prev', u'Open Prev')
 
-        # save = action('&Save', self.saveFile,
-        #               'Ctrl+S', 'save', u'Save labels to file', enabled=False)
-
-        # close = action('&Close', self.closeFile, 'Ctrl+W', 'close', u'Close current file')
-
         resetAll = action('&ResetAll', self.resetAll, None, 'resetall', u'Reset all')
-
-        # color1 = action('Box Line Color', self.chooseColor1,
-        #                 'Ctrl+L', 'color_line', u'Choose Box line color')
 
         createMode = action('Create new label', self.setCreateMode,
                             'w', 'new', u'Start drawing a new label', enabled=False)
         editMode = action('&Edit ellipse', self.setEditMode,
                           'Ctrl+J', 'edit', u'Move and edit Boxs', enabled=False)
 
-        # create = action('Create a label', self.createShape,
-        #                 'w', 'new', u'Draw a new label', enabled=False)
-
         delete = action('Delete label', self.deleteSelectedShape,
                         'Delete', 'delete', u'Delete', enabled=False)
-
-        # duplicate_label = action('Create duplicated label', self.createDuplicatedLabel, 'Ctrl+D',
-        #                      'new dupl. label', u'Create new label duplicating this one')
 
         start_track = action('Start &new track', self.startNewTrack, 'Ctrl+N',
                              'new track', u'Creating new track starting from this label')
@@ -1164,10 +1140,6 @@ class MainWindow(QMainWindow):
             generate_color = generateColorByText(text)
             shape = self.canvas.setLastLabel(text, generate_color, generate_color)
             self.addLabel(shape)
-            # if self.beginner():  # Switch to edit mode.
-            #     self.canvas.setEditing(True)
-            #     self.actions.create.setEnabled(True)
-            # else:
             self.canvas.setEditing(True)
             self.actions.editMode.setEnabled(True)
             self.setDirty()

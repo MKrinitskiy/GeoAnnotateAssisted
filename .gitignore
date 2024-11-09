@@ -129,3 +129,7 @@ debug/
 dev/
 *.ipynb
 **/.GeoAnnotateSettings.pkl
+.aider*
+.vscode
+GAAmediator
+GAAmediator/**
