@@ -11,7 +11,7 @@ def parse_args(args):
                         help="""turns logging of http requests on""")
 
     parser.add_argument('--labels-type', '-t', dest='labels_type', default='MCS',
-                        choices = ['MCS', 'MC', 'PL', 'AMRC', 'CS'],
+                        choices = ['MCS', 'MC', 'PL', 'AMRC', 'CS', 'QLL'],
                         help="""Switching between labeling problems: \n
                                 MCS - for tracking (M)esoscale (C)onvective (S)ystems in METEOSAT remote sensing 
                                 imagery; \n

@@ -9,7 +9,7 @@ from collections import defaultdict
 import threading
 import pandas as pd
 import sqlite3
-from libs.QuasiLinearLabel import QuasiLinearLabel
+from libs.QLLabel import QuasiLinearLabel
 import resources
 
 import sys
@@ -28,7 +28,7 @@ import os
 try:
     os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 except Exception as ex:
-    ReportException('./logs/errors.log', ex)
+    ReportException('./logs/error.log', ex)
 
 
 
@@ -38,7 +38,10 @@ __appname__ = 'GeoAnnotate assisted'
 args = sys.argv[1:]
 args = parse_args(args)
 EnsureDirectoryExists('./logs/')
-logging.basicConfig(filename='./logs/app.log', level=logging.INFO, format='%(asctime)s %(message)s')
+if args.comm_debug:
+    EnsureDirectoryExists('./comm_debug/')
+
+logging.basicConfig(filename='./logs/app.log', level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.info('Started AI-assisted GeoAnnotate client-side app')
 logging.info('args: %s' % sys.argv[1:])
 
@@ -52,6 +55,8 @@ class MainWindow(QMainWindow):
         action = partial(newAction, self)
 
         self.setWindowTitle(__appname__)
+
+        self.logger = logging.getLogger(__name__)
 
         self._basemaphelper = None
 
@@ -101,7 +106,7 @@ class MainWindow(QMainWindow):
             self.shapes_points_count = 2
             self.label_class = MClabel
         elif self.label_types == 'QLL':
-            self.shapes_points_count = 2
+            self.shapes_points_count = None
             self.label_class = QuasiLinearLabel
         elif self.label_types == 'CS':
             self.shapes_points_count = 3
@@ -707,7 +712,7 @@ class MainWindow(QMainWindow):
                 if curr_track.database_insert_track_info(self.tracks_db_fname):
                     self.setClean()
                 else:
-                    DisplayWarning('OOPS', 'Something went wrong!', 'Some of the new track data were not written to the database.\nPlease refer to the "errors.log" file and make the developer know about the error.')
+                    DisplayWarning('OOPS', 'Something went wrong!', 'Some of the new track data were not written to the database.\nPlease refer to the "error.log" file and make the developer know about the error.')
                     self.setDirty()
 
                 self.trackListWidget.resizeColumnToContents(0)
@@ -823,6 +828,7 @@ class MainWindow(QMainWindow):
 
     def fileitemDoubleClicked(self, item=None):
         selected_str = ustr(item.text())
+        self.logger.info(f'fileitemDoubleClicked: {selected_str}')
         if args.labels_type == 'MCS':
             pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| (MSG\d) \| uuid:(.+) \|.+\.nc'
             uuid_group_No = 7
@@ -835,12 +841,17 @@ class MainWindow(QMainWindow):
         elif args.labels_type == 'CS':
             pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| uuid:(.+)'
             uuid_group_No = 6
+        elif args.labels_type == 'QLL':
+            pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| (MSG\d) \| uuid:(.+) \|.+\.nc'
+            uuid_group_No = 7
 
         m = re.match(pattern, selected_str)
         if m is not None:
             curr_uuid = m.groups()[uuid_group_No]
             item.setSelected(True)
             self.loadFile(curr_uuid)
+        else:
+            self.logger.error(f'no match found for fileitemDoubleClicked: {selected_str}')
 
 
     def btnstate(self, item= None):
@@ -925,11 +936,14 @@ class MainWindow(QMainWindow):
         for label in labels:
             shape = Shape(label=label, parent_canvas=self.canvas)
 
-            # for (x, y),(lon,lat) in zip(latlonPoints):
-            for (pt_name, pt_latlon) in sorted(label.pts.items(), key=lambda x: x[0]):
-                # x_pic,y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
-                x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
-                shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
+            if isinstance(label, QuasiLinearLabel):
+                for pt_latlon in label.pts:
+                    x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
+                    shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
+            else:
+                for (pt_name, pt_latlon) in sorted(label.pts.items(), key=lambda x: x[0]):
+                    x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
+                    shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
             shape.close()
             s.append(shape)
 
@@ -970,7 +984,7 @@ class MainWindow(QMainWindow):
 
 
     def loadTracks(self):
-        if (args.labels_type == 'MCS'):
+        if (args.labels_type == 'MCS') or (args.labels_type == 'QLL'):
             time_tolerance_minutes = 30
         elif (args.labels_type in ['MC', 'PL']):
             time_tolerance_minutes = 3*60+1
@@ -982,9 +996,14 @@ class MainWindow(QMainWindow):
         tracks_from_db = DatabaseOps.read_tracks_by_datetime(self.tracks_db_fname, self.curr_dt, self.queries_collection, time_tol_minutes = time_tolerance_minutes)
         if tracks_from_db and len(tracks_from_db) > 0:
             columns = ['track_uid', 'track_human_readable_name', 'label_id', 'label_uid', 'label_dt', 'label_name']
-            for i in range(self.shapes_points_count):
-                columns = columns + ['lon%d'%i, 'lat%d'%i]
-            columns = columns + ['sourcedata_fname']
+            if self.shapes_points_count is not None:
+                for i in range(self.shapes_points_count):
+                    columns = columns + ['lon%d'%i, 'lat%d'%i]
+                columns = columns + ['sourcedata_fname']
+            else:
+                # QLLabel
+                columns = columns + ['sourcedata_fname']
+                columns = columns + ['pts']
             tracks_df = pd.DataFrame(np.array(tracks_from_db), columns=columns)
             tracks_df['label_dt'] = pd.to_datetime(tracks_df['label_dt'])
             track_uids = tracks_df['track_uid'].unique()
@@ -994,7 +1013,12 @@ class MainWindow(QMainWindow):
                     curr_track = Track(args, {'uid': track_uid, 'human_readable_name': track_human_readable_name})
                     track_labels = tracks_df[tracks_df['track_uid'] == track_uid]
                     for idx, track_label_row in track_labels.iterrows():
-                        curr_track.append_new_label(self.label_class.from_db_row_dict(track_label_row.to_dict()))
+                        try:
+                            label = self.label_class.from_db_row_dict(track_label_row.to_dict())
+                        except Exception as ex:
+                            self.logger.error(f'Error loading label {track_label_row["label_uid"]} from the database: {ex}')
+                            continue
+                        curr_track.append_new_label(label)
 
                     track_item = HashableQTreeWidgetItem([curr_track.human_readable_name, curr_track.uid, ''])
                     track_item.setFlags(track_item.flags() | Qt.ItemIsUserCheckable)
@@ -1022,10 +1046,10 @@ class MainWindow(QMainWindow):
                 if DatabaseOps.insert_label_data(self.tracks_db_fname, curr_label, self.queries_collection):
                     self.setClean()
                 else:
-                    DisplayWarning('OOPS', 'Something went wrong!', 'Some of labels were not written to the database.\nPlease refer to the "errors.log" file and make the developer know about the error.')
+                    DisplayWarning('OOPS', 'Something went wrong!', 'Some of labels were not written to the database.\nPlease refer to the "error.log" file and make the developer know about the error.')
             return True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex)
+            ReportException('./logs/error.log', ex)
             return False
 
 
@@ -1063,7 +1087,7 @@ class MainWindow(QMainWindow):
                 self.setClean()
             else:
                 DisplayWarning('OOPS', 'Something went wrong!',
-                               'The label updates were not written to the database for some reason.\nPlease refer to the "errors.log" file and make the developer know about the error.')
+                               'The label updates were not written to the database for some reason.\nPlease refer to the "error.log" file and make the developer know about the error.')
         else:  # User probably changed item visibility
             self.canvas.setShapeVisible(shape, item.checkState(0) == Qt.Checked)
 
@@ -1075,16 +1099,18 @@ class MainWindow(QMainWindow):
             if curr_item.checkState(0) == Qt.Checked:
                 self.temporary_shapes = []
     
-                # for track_item in get_all_toplevel_items(self.trackListWidget):
-                #     if track_item != curr_item:
-                #         track_item.setCheckState(0, Qt.Unchecked)
                 curr_track = self.TrackItemsToTracks[curr_item]
                 track_labels_data = DatabaseOps.read_track_labels_by_track_uid(self.tracks_db_fname, curr_track.uid, self.queries_collection)
 
                 columns = ['label_id', 'label_uid', 'label_dt', 'label_name']
-                for i in range(self.shapes_points_count):
-                    columns = columns + ['lon%d' % i, 'lat%d' % i]
-                columns = columns + ['sourcedata_fname']
+                if self.shapes_points_count is not None:
+                    for i in range(self.shapes_points_count):
+                        columns = columns + ['lon%d'%i, 'lat%d'%i]
+                    columns = columns + ['sourcedata_fname']
+                else:
+                    # QLLabel
+                    columns = columns + ['sourcedata_fname']
+                    columns = columns + ['pts']
 
                 track_labels_df = pd.DataFrame(np.array(track_labels_data), columns=columns)
                 track_labels_df['label_dt'] = pd.to_datetime(track_labels_df['label_dt'])
@@ -1093,9 +1119,13 @@ class MainWindow(QMainWindow):
                 for idx,label_row in track_labels_df.iterrows():
                     curr_label = self.label_class.from_db_row_dict(label_row.to_dict())
                     shape = Shape(label=curr_label, parent_canvas=self.canvas)
-                    for (pt_name, pt_latlon) in sorted(curr_label.pts.items(), key=lambda x: x[0]):
-                        # x_pic, y_pic = self.canvas.transformLatLonToPixmapCoordinates(pt_latlon['lon'], pt_latlon['lat'])
-                        x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
+                    if isinstance(curr_label, QuasiLinearLabel):
+                        for pt_latlon in curr_label.pts:
+                            x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
+                            shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
+                    else:
+                        for (pt_name, pt_latlon) in sorted(curr_label.pts.items(), key=lambda x: x[0]):
+                            x_pic, y_pic = self.basemaphelper.latlon2xy(pt_latlon['lat'], pt_latlon['lon'])
                         shape.addPoint(QPointF(x_pic, y_pic), QPointF(pt_latlon['lon'], pt_latlon['lat']))
                     shape.close()
                     self.temporary_shapes.append(shape)
@@ -1133,8 +1163,6 @@ class MainWindow(QMainWindow):
         else:
             text = self.defaultLabelTextLine.text()
 
-        # Add Chris
-        # self.diffcButton.setChecked(False)
         if text is not None:
             self.prevLabelText = text
             generate_color = generateColorByText(text)
@@ -1147,13 +1175,12 @@ class MainWindow(QMainWindow):
             if text not in self.labelHist:
                 self.labelHist.append(text)
         else:
-            # self.canvas.undoLastLine()
             self.canvas.resetAllLines()
 
         # MK: set latlon points of the new shape to pts of the label of this shape
         new_shape = self.canvas.shapes[-1]
         pts = {}
-        for i in range(new_shape.shapes_points_count):
+        for i in range(len(new_shape.points)):
             lon = new_shape.latlonPoints[i].x()
             lat = new_shape.latlonPoints[i].y()
             pt = {'lat': lat, 'lon': lon}
@@ -1161,11 +1188,13 @@ class MainWindow(QMainWindow):
         new_shape.label.pts = pts
 
         new_shape.label.sourcedata_fname = os.path.basename(self.filePath)
-        if DatabaseOps.insert_label_data(self.tracks_db_fname, new_shape.label, self.queries_collection):
-            self.setClean()
-        else:
+        try:
+            if DatabaseOps.insert_label_data(self.tracks_db_fname, new_shape.label, self.queries_collection):
+                self.setClean()
+        except:
+            ReportException('./logs/error.log', None)
             DisplayWarning('OOPS', 'Something went wrong!',
-                           'The new label was not written to the database for some reason.\nPlease refer to the "errors.log" file and make the developer know about the error.')
+                           'The new label was not written to the database for some reason.\nPlease refer to the "error.log" file and make the developer know about the error.')
 
 
 
@@ -1173,7 +1202,7 @@ class MainWindow(QMainWindow):
         self.setDirty()
         selected_shape = self.canvas.selectedShape
         pts = {}
-        for i in range(selected_shape.shapes_points_count):
+        for i in range(len(selected_shape.latlonPoints)):
             lon = selected_shape.latlonPoints[i].x()
             lat = selected_shape.latlonPoints[i].y()
             pt = {'lat': lat, 'lon': lon}
@@ -1183,7 +1212,7 @@ class MainWindow(QMainWindow):
         self.setDirty()
         res = DatabaseOps.update_label(self.tracks_db_fname, selected_shape.label, self.queries_collection)
         if not res:
-            print('WARNING! the label was not updated in the database. Please refer to the errors.log file for details.')
+            print('WARNING! the label was not updated in the database. Please refer to the error.log file for details.')
         else:
             self.setClean()
 
@@ -1483,22 +1512,23 @@ class MainWindow(QMainWindow):
 
         self.status("Loaded data for %s with serverside-uuid: %s" % (datetime.datetime.strftime(self.curr_dt, '%Y-%m-%d %H:%M:%S'), uuid))
         self.image = image
-        # self.filePath = unicodeFilePath
         self.canvas.loadPixmap(QPixmap.fromImage(image))
 
         self.setClean()
         self.canvas.setEnabled(True)
         self.adjustScale(initial=True)
         self.paintCanvas()
-        # self.addRecentFile(self.filePath)
         self.toggleActions(True)
 
         self.actions.refreshBasemap.setEnabled(True)
         self.actions.zoomHires.setEnabled(True)
         self.actions.switchDataChannel.setEnabled(True)
 
-        labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, os.path.basename(self.filePath))
-        self.loadLabels(labels_from_database)
+        try:    
+            labels_from_database = self.label_class.loadLabelsFromDatabase(self.tracks_db_fname, os.path.basename(self.filePath))
+            self.loadLabels(labels_from_database)
+        except:
+            ReportException('./logs/error.log', None)
 
         if self.settings.get(SETTING_DETECTION_USE_NEURAL_ASSISTANCE):
             labels_cnn_predicted = self.basemaphelper.RequestPredictedMCSlabels()
@@ -1618,6 +1648,9 @@ class MainWindow(QMainWindow):
                 item_str = '%s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'], os.path.basename(row['full_fname']))
             if args.labels_type == 'CS':
                 item_str = '%s | uuid:%s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['uuid'])
+            elif args.labels_type == 'QLL':
+                item_str = '%s | %s | uuid:%s | %s' % (datetime.datetime.strftime(row['dt'], '%Y-%m-%d %H:%M:%S'), row['MSG_label'], row['uuid'], os.path.basename(row['full_fname']))
+                # pattern = r'(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) \| (MSG\d) \| uuid:(.+) \|.+\.nc'
             item = QListWidgetItem(item_str)
             self.fileListWidget.addItem(item)
 
@@ -1740,7 +1773,7 @@ class MainWindow(QMainWindow):
         self.setDirty()
         res = DatabaseOps.remove_label(self.tracks_db_fname, shape_to_delete.label.uid, self.queries_collection)
         if not res:
-            print('WARNING! the label was not removed from database. Please refer to the errors.log file for details.')
+            print('WARNING! the label was not removed from database. Please refer to the error.log file for details.')
         else:
             self.setClean()
             self.tracks.clear()

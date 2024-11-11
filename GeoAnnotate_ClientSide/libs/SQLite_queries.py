@@ -112,6 +112,20 @@ class SQLite_Queries:
 
             self.UPDATE_LABEL_DATA_QUERY_TEXT = '''UPDATE labels SET dt="%s", name="%s", lon0="%s", lat0="%s", lon1="%s", lat1="%s" ''' + \
                                                 '''  WHERE label_uid = "%s"'''
+        
+        elif self.label_types == 'QLL':
+            self.CREATE_LABELS_TABLE_QUERY_TEXT = '''CREATE TABLE labels (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, ''' + \
+                                                  '''               label_uid TEXT NOT NULL UNIQUE, ''' + \
+                                                  '''               dt TEXT NOT NULL, ''' + \
+                                                  '''               name TEXT NOT NULL, ''' + \
+                                                  '''               sourcedata_fname TEXT NOT NULL, ''' + \
+                                                  '''               pts TEXT NOT NULL)'''
+
+            self.INSERT_LABEL_QUERY_TEXT = '''INSERT OR IGNORE INTO labels (label_uid, dt, name, pts, sourcedata_fname) ''' + \
+                                           '''                      VALUES ("%s", "%s", "%s", "%s", "%s")'''
+
+            self.UPDATE_LABEL_DATA_QUERY_TEXT = '''UPDATE labels SET dt="%s", name="%s", pts="%s" ''' + \
+                                                '''  WHERE label_uid = "%s"'''
 
 
 DATETIME_FORMAT_STRING = '%Y-%m-%dT%H:%M:%S'

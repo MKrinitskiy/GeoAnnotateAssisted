@@ -10,6 +10,7 @@ import uuid
 from .MCSlabel import *
 from .MClabel import *
 from datetime import datetime
+from libs.ga_defs import *
 
 DEFAULT_LINE_COLOR = QColor(0, 255, 0, 128)
 DEFAULT_FILL_COLOR = QColor(255, 0, 0, 128)
@@ -19,7 +20,7 @@ DEFAULT_VERTEX_FILL_COLOR = QColor(0, 255, 0, 255)
 DEFAULT_HVERTEX_FILL_COLOR = QColor(255, 0, 0)
 MIN_Y_LABEL = 10
 
-shape_types = enum(['ellipse', 'circle'])
+shape_types = enum(['ellipse', 'circle', 'qllabel'])
 
 class Shape(object):
     P_SQUARE, P_ROUND = range(2)
@@ -30,6 +31,7 @@ class Shape(object):
     # of _all_ shape objects.
     line_color = DEFAULT_LINE_COLOR
     fill_color = DEFAULT_FILL_COLOR
+    width_circles_color = DEFAULT_SELECT_FILL_COLOR
     select_line_color = DEFAULT_SELECT_LINE_COLOR
     select_fill_color = DEFAULT_SELECT_FILL_COLOR
     vertex_fill_color = DEFAULT_VERTEX_FILL_COLOR
@@ -49,12 +51,21 @@ class Shape(object):
             else:
                 self.dt = datetime.now()
 
-            self.label = self.parent_canvas.parent.label_class('', self.uid, self.dt, None, None)
+            try:    
+                if self.label_type == 'QLL':
+                    self.label = self.parent_canvas.parent.label_class("", self.uid, self.dt, None, None, os.path.basename(parent_canvas.parent.filePath))
+                else:
+                    self.label = self.parent_canvas.parent.label_class("", self.uid, self.dt, None, None)
+            except:
+                self.label = None
+                ReportException('./logs/error.log', None)
+                return
         elif (isinstance(label, self.parent_canvas.parent.label_class)):
             self.label = label
             self.uid = label.uid
             self.dt = label.dt
         else:
+            self.parent_canvas.logger.error(f'label is not an instance of {self.parent_canvas.parent.label_class}')
             raise NotImplementedError()
 
         if self.label_type == 'MCS':
@@ -65,8 +76,11 @@ class Shape(object):
             self.shape_type = shape_types.circle
         elif (self.label_type == 'CS'):
             self.shape_type = shape_types.ellipse
+        elif (self.label_type == 'QLL'):
+            self.shape_type = shape_types.qllabel
 
         self.points = []
+        self.radii = []
         self.latlonPoints = []
         self.selected = False
         self.paintLabel = paintLabel
@@ -86,6 +100,8 @@ class Shape(object):
             self.shapes_points_count = 2
         elif self.parent_canvas.parent.label_types == 'CS':
             self.shapes_points_count = 3
+        elif self.parent_canvas.parent.label_types == 'QLL':
+            self.shapes_points_count = None
 
         self._highlightIndex = None
         self._highlightMode = self.NEAR_VERTEX
@@ -100,16 +116,25 @@ class Shape(object):
         self._closed = True
 
     def reachMaxPoints(self):
-        if len(self.points) >= 3:
+        if self.shape_type == shape_types.qllabel:
+            return False
+        elif ((len(self.points) >= 3) and (self.shapes_points_count is not None)):
             return True
         return False
 
     def addPoint(self, point, latlonPoint):
+        self.parent_canvas.logger.info(f'addPoint: {point}, {latlonPoint}')
         if not self.reachMaxPoints():
             self.points.append(point)
             self.latlonPoints.append(latlonPoint)
+            # if self.shape_type == shape_types.qllabel:
+                # if isinstance(self.label, QuasiLinearLabel):
+                    # self.
+                    # self.label.pts.append(latlonPoint)
+        # self.paint()
 
     def popPoint(self, latlon = False):
+        self.parent_canvas.logger.info(f'popPoint: {latlon}')
         if self.points:
             if latlon:
                 return self.latlonPoints.pop()
@@ -142,7 +167,29 @@ class Shape(object):
                 color = self.select_fill_color if self.selected else self.fill_color
                 self._painter.setBrush(color)
 
-            if (self.shapes_points_count == len(self.points)):
+            if self.shape_type == shape_types.qllabel:
+                # self._painter.drawPath()
+
+                # line_path = self.makePath()
+                
+                vrtx_path = QPainterPath()
+                width_path = QPainterPath()
+
+                line_path = QPainterPath()
+                line_path.moveTo(self.points[0])
+                for i, p in enumerate(self.points):
+                    line_path.lineTo(p)
+                    self.drawVertex(vrtx_path, i)
+                    self.drawWidthCircle(width_path, i)
+                
+                self._painter.drawPath(line_path)
+                self._painter.drawPath(width_path)
+                self._painter.drawPath(vrtx_path)
+                self._painter.fillPath(vrtx_path, self.vertex_fill_color)
+                self._painter.fillPath(width_path, self.width_circles_color)
+
+
+            elif (self.shapes_points_count == len(self.points)):
                 if self.shapes_points_count == 2:
                     x0 = self.points[0].x()
                     x1 = self.points[1].x()
@@ -226,6 +273,7 @@ class Shape(object):
                     self._painter.translate(xc, yc)
                     self._painter.rotate(alpha)
                     self._painter.drawEllipse(rect)
+            
 
             self._painter.end()
 
@@ -244,12 +292,22 @@ class Shape(object):
             self.vertex_fill_color = self.hvertex_fill_color
         else:
             self.vertex_fill_color = Shape.vertex_fill_color
+
         if shape == self.P_SQUARE:
             path.addRect(point.x() - d / 2, point.y() - d / 2, d, d)
         elif shape == self.P_ROUND:
             path.addEllipse(point, d / 2.0, d / 2.0)
         else:
             assert False, "unsupported vertex shape"
+    
+
+    def drawWidthCircle(self, path, i):
+        # TODO: perhaps convert latlonPoints to points in order to draw
+
+        point = self.points[i]
+        radius = 2*self.point_size
+
+        path.addEllipse(point, radius, radius)
 
 
 

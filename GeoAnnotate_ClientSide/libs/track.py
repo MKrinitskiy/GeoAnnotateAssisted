@@ -1,5 +1,7 @@
 import uuid
 import sqlite3
+
+from libs.QLLabel import QuasiLinearLabel
 from .SQLite_queries import *
 from datetime import datetime
 from .shape import Shape
@@ -30,6 +32,8 @@ class Track():
             self.labels.append(label)
         elif isinstance(label, MClabel):
             self.labels.append(label)
+        elif isinstance(label, QuasiLinearLabel):
+            self.labels.append(label)
         elif isinstance(label, dict):
             raise NotImplementedError('Unable to parse the label data to append it to to the track')
         else:
@@ -47,7 +51,7 @@ class Track():
                 c.execute(self.queries_collection.DELETE_TRACK_QUERY_TEXT               % self.uid)
                 conn.commit()
         except Exception as ex:
-            ReportException('./logs/errors.log', ex)
+            ReportException('./logs/error.log', ex)
             print('Failed executing sqlite query')
 
     def database_insert_track_info(self, db_fname):
@@ -58,6 +62,6 @@ class Track():
                 DatabaseOps.insert_track_label_entry(db_fname, self, curr_label, self.queries_collection)
             return True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex)
+            ReportException('./logs/error.log', ex)
             print('Failed executing sqlite query')
             return False

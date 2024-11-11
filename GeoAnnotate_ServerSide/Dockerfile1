@@ -1,0 +1,59 @@
+FROM python:3.10.15-slim-bullseye
+
+RUN apt update
+RUN apt install -y --no-install-recommends \
+    apt-utils
+
+RUN apt install -y --no-install-recommends \
+    build-essential \
+    ffmpeg \
+    git \
+    vim \
+    openssh-server \
+    tmux \
+    mc \
+    iputils-ping \
+    sudo
+
+RUN mkdir /var/run/sshd && \
+    sed -i 's/UsePAM yes/UsePAM no/g' /etc/ssh/sshd_config && \
+    echo 'Port 2224' >> /etc/ssh/sshd_config && \
+    echo 'Protocol 2' >> /etc/ssh/sshd_config && \
+    echo 'SyslogFacility AUTH' >> /etc/ssh/sshd_config && \
+    echo 'LogLevel INFO' >> /etc/ssh/sshd_config && \
+    echo 'PermitRootLogin no' >> /etc/ssh/sshd_config && \
+    echo 'StrictModes yes' >> /etc/ssh/sshd_config && \
+    echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config && \
+    echo 'IgnoreRhosts yes' >> /etc/ssh/sshd_config && \
+    echo 'HostbasedAuthentication no' >> /etc/ssh/sshd_config && \
+    echo 'PermitEmptyPasswords no' >> /etc/ssh/sshd_config && \
+    echo 'ChallengeResponseAuthentication no' >> /etc/ssh/sshd_config && \
+    echo 'GSSAPIAuthentication no' >> /etc/ssh/sshd_config && \
+    echo 'TCPKeepAlive yes' >> /etc/ssh/sshd_config && \
+    echo "sshd done"
+
+RUN groupadd -g 20000 sail && \
+    useradd -c 'Mikhail Krinitskiy' -u 1001 -G sail -m -d /home/mk -s /bin/bash mk && \
+    echo 'mk:w4TUmLNF9a6oTbYHb!P3e9o' | chpasswd && \
+    usermod -g sail mk && \
+    echo 'mk ALL=(ALL)NOPASSWD:ALL' >> /etc/sudoers && \
+    echo "users done"
+
+USER mk
+RUN mkdir /home/mk/.ssh && \
+    chmod 700 /home/mk/.ssh
+COPY ./docker_service/mk_geoseg_key_2024.pub /home/mk/.ssh/mk_geoseg_key_2024.pub
+COPY ./docker_service/.bashrc /home/mk/.bashrc
+RUN sudo chown mk:sail /home/mk/.ssh/mk_geoseg_key_2024.pub && \
+    sudo chown mk:sail /home/mk/.bashrc && \
+    sudo chown mk:sail /home/mk/.profile && \
+    sudo cat /home/mk/.ssh/mk_geoseg_key_2024.pub >> /home/mk/.ssh/authorized_keys && \
+    sudo chown mk:sail /home/mk/.ssh/authorized_keys && \
+    sudo chmod 600 /home/mk/.ssh/authorized_keys && \
+    sudo rm /home/mk/.ssh/mk_geoseg_key_2024.pub
+RUN sudo chown -Rvf mk:sail /home/mk
+
+WORKDIR /code
+
+CMD ["bash"]
+

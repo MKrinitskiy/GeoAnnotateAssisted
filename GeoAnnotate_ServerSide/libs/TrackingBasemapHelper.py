@@ -44,7 +44,7 @@ class TrackingBasemapHelperClass(object):
         self.DataInterpolated = {}
 
 
-        if self.app.args.data_type == 'METEOSAT-MCS':
+        if ((self.app.args.data_type == 'METEOSAT-MCS') or (self.app.args.data_type == "METEOSAT-QLL")):
             self.currentChannel = 'ch9'
             self.channelNames = ['ch9', 'ch5', 'ch5_ch9']
             self.channelColormaps = [create_ch9_cmap(),

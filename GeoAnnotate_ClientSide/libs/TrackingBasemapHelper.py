@@ -42,13 +42,14 @@ class TrackingBasemapHelperClass:
         self.urcrnrlat = None
         self.BasemapLayerImage = None
         self.CVimageCombined = None
+        self.logger = logging.getLogger(__name__)
 
         self.webapi_client_id = binascii.hexlify(os.urandom(24)).decode("utf-8")
 
         # self.remotehost = 'localhost'
         self.remotehost = self.app_args.remotehost
 
-        if self.app_args.labels_type == 'MCS':
+        if ((self.app_args.labels_type == 'MCS') | (self.app_args.labels_type == 'QLL')):
             self.channelsDescriptions = {'ch9': 'ch9: 10.8 micron',
                                          'ch5': 'ch5: 6.2 micron',
                                          'ch5_ch9': 'ch5 - ch9',
@@ -99,7 +100,10 @@ class TrackingBasemapHelperClass:
 
 
     def xy2value(self, posx: int = 0, posy: int = 0):
-        dataname = self.currentChannel
+        try:
+            dataname = self.currentChannel
+        except:
+            dataname = 'ch9'
 
         try:
             retVal = self.__dict__['DataInterpolated_%s' % dataname][int(np.round(self.lons_proj.shape[0]-posy)), int(np.round(posx))]
@@ -144,20 +148,20 @@ class TrackingBasemapHelperClass:
         url1 = 'http://%s:%d/imdone?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
         try:
             if self.app_args.http_logging:
-                logging.info(url1)
+                self.logger.info(url1)
             req1 = requests.get(url1)
         except Exception as ex:
-            print('Request failed. Please check the connection.')
-            ReportException('./logs/errors.log', ex)
+            self.logger.error('Request failed. Please check the connection.')
+            ReportException('./logs/error.log', ex)
             raise RequestFailedException()
-        print(req1.headers)
+        self.logger.info(req1.headers)
         ctype = req1.headers['Content-Type']
         m = re.match(r'.+charset=(.+)', ctype)
         enc = 'utf-8'
         if m is not None:
             enc = m.groups()[0]
-            print('encoding detected: %s' % enc)
-        print(req1.status_code)
+            self.logger.info('encoding detected: %s' % enc)
+        self.logger.info(req1.status_code)
 
 
 
@@ -169,26 +173,26 @@ class TrackingBasemapHelperClass:
             req = requests.get(url, json=json.dumps(basemap_args))
             # req = requests.get(url, stream=True)
             if self.app_args.http_logging:
-                logging.info(url)
+                self.logger.info(url)
         except Exception as ex:
-            print('Request failed. Please check the connection.')
-            ReportException('./logs/errors.log', ex)
+            self.logger.error('Request failed. Please check the connection.')
+            ReportException('./logs/error.log', ex)
             raise RequestFailedException()
 
 
-        print(req.headers)
+        self.logger.info(req.headers)
         ctype = req.headers['Content-Type']
         m = re.match(r'.+charset=(.+)', ctype)
         enc = 'utf-8'
         if m is not None:
             enc = m.groups()[0]
-            print('encoding detected: %s' % enc)
-        print(req.status_code)
+            self.logger.info('encoding detected: %s' % enc)
+        self.logger.info(req.status_code)
 
         for line in streamlines_gen(req):
             print(line)
             if line == 'READY':
-                print('Got READY response. Serverside client-server comm.agent is ready.')
+                self.logger.info('Got READY response. Serverside client-server comm.agent is ready.')
 
 
     def RequestDataSnapshotsList(self,
@@ -205,41 +209,41 @@ class TrackingBasemapHelperClass:
         try:
             req1 = requests.get(url1, stream=True)
             if self.app_args.http_logging:
-                logging.info(url1)
+                self.logger.info(url1)
         except Exception as ex:
-            print('Request failed. You may want to check your connection.')
-            ReportException('./logs/errors.log', ex)
+            self.logger.error('Request failed. You may want to check your connection.')
+            ReportException('./logs/error.log', ex)
             raise RequestFailedException()
 
 
-        print(req1.headers)
+        self.logger.info(req1.headers)
         ctype = req1.headers['Content-Type']
         m = re.match(r'.+charset=(.+)', ctype)
         enc = 'utf-8'
         if m is not None:
             enc = m.groups()[0]
-            print('encoding detected: %s' % enc)
-        print(req1.status_code)
+            self.logger.info('encoding detected: %s' % enc)
+        self.logger.info(req1.status_code)
 
         for line in streamlines_gen(req1):
             print(line)
             if line == 'READY':
-                print('Got READY response. Serverside source data list is ready. Requesting it.')
+                self.logger.info('Got READY response. Serverside source data list is ready. Requesting it.')
                 try:
                     req = requests.get(url2)
                     if self.app_args.http_logging:
-                        logging.info(url2)
+                        self.logger.info(url2)
                 except Exception as ex:
-                    print('Request failed. Please check the connection.')
-                    ReportException('./logs/errors.log', ex)
+                    self.logger.error('Request failed. Please check the connection.')
+                    ReportException('./logs/error.log', ex)
                     raise RequestFailedException()
 
-                print(req.status_code)
-                print(req.headers)
+                self.logger.info(req.status_code)
+                self.logger.info(req.headers)
                 enc = 'utf-8'
                 if m is not None:
                     enc = m.groups()[0]
-                    print('encoding detected: %s' % enc)
+                    self.logger.info('encoding detected: %s' % enc)
 
                 req_json = req.content.decode(enc)
                 if req_json == 'There is no data in this date/time range':
@@ -260,32 +264,32 @@ class TrackingBasemapHelperClass:
 
 
 
-    def RequestPreparedImages(self, resolution = 'c', calculateLatLonLimits=True):
-        url = 'http://%s:%d/images?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
-        try:
-            req = requests.get(url)
-            if self.app_args.http_logging:
-                logging.info(url)
-        except Exception as ex:
-            print('Request failed. Please check the connection.')
-            ReportException('./logs/errors.log', ex)
-            raise RequestFailedException()
+    # def RequestPreparedImages(self, resolution = 'c', calculateLatLonLimits=True):
+    #     url = 'http://%s:%d/images?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
+    #     try:
+    #         req = requests.get(url)
+    #         if self.app_args.http_logging:
+    #             self.logger.info(url)
+    #     except Exception as ex:
+    #         self.logger.error('Request failed. Please check the connection.')
+    #         ReportException('./logs/error.log', ex)
+    #         raise RequestFailedException()
 
-        print(req.status_code)
-        print(req.headers)
+    #     self.logger.info(req.status_code)
+    #     self.logger.info(req.headers)
 
-        self.srvUUID2DataDesc = req.content
+    #     self.srvUUID2DataDesc = req.content
 
-        rec_dict = None
-        with BytesIO() as bytesf:
-            bytesf.write(req.content)
-            bytesf.seek(0)
-            rec_dict = pickle.load(bytesf)
+    #     rec_dict = None
+    #     with BytesIO() as bytesf:
+    #         bytesf.write(req.content)
+    #         bytesf.seek(0)
+    #         rec_dict = pickle.load(bytesf)
 
-        if rec_dict is not None:
-            self.deflate_recieved_dict(rec_dict)
-        else:
-            raise Exception('Generated images transfer failed.')
+    #     if rec_dict is not None:
+    #         self.deflate_recieved_dict(rec_dict)
+    #     else:
+    #         raise Exception('Generated images transfer failed.')
 
 
 
@@ -302,38 +306,38 @@ class TrackingBasemapHelperClass:
         try:
             req1 = requests.get(url1, stream=True)
             if self.app_args.http_logging:
-                logging.info(url1)
+                self.logger.info(url1)
         except Exception as ex:
-            print('Request failed. Please check the connection.')
-            ReportException('./logs/errors.log', ex)
+            self.logger.error('Request failed. Please check the connection.')
+            ReportException('./logs/error.log', ex)
             raise RequestFailedException()
 
-        print(req1.headers)
+        self.logger.info(req1.headers)
         ctype = req1.headers['Content-Type']
         m = re.match(r'.+charset=(.+)', ctype)
         enc = 'utf-8'
         if m is not None:
             enc = m.groups()[0]
-            print('encoding detected: %s' % enc)
-        print(req1.status_code)
+            self.logger.info('encoding detected: %s' % enc)
+        self.logger.info(req1.status_code)
 
         for line in streamlines_gen(req1):
             print(line)
             if line == 'READY':
-                print('got READY response')
-                print('requesting image')
+                self.logger.info('got READY response')
+                self.logger.info('requesting image')
 
                 try:
                     req2 = requests.get(url2)
                     if self.app_args.http_logging:
-                        logging.info(url2)
+                        self.logger.info(url2)
                 except Exception as ex:
-                    print('Request failed. Please check the connection.')
-                    ReportException('./logs/errors.log', ex)
+                    self.logger.error('Request failed. Please check the connection.')
+                    ReportException('./logs/error.log', ex)
                     raise RequestFailedException()
 
-                print(req2.status_code)
-                print(req2.headers)
+                self.logger.info(req2.status_code)
+                self.logger.info(req2.headers)
 
                 rec_dict = None
                 with BytesIO() as bytesf:
@@ -357,37 +361,37 @@ class TrackingBasemapHelperClass:
         try:
             req1 = requests.get(url1, stream=True)
             if self.app_args.http_logging:
-                logging.info(url1)
+                self.logger.info(url1)
         except Exception as ex:
-            print('Request failed. Please check the connection.')
-            ReportException('./logs/errors.log', ex)
+            self.logger.error('Request failed. Please check the connection.')
+            ReportException('./logs/error.log', ex)
             raise RequestFailedException()
 
-        print(req1.headers)
+        self.logger.info(req1.headers)
         ctype = req1.headers['Content-Type']
         m = re.match(r'.+charset=(.+)', ctype)
         enc = 'utf-8'
         if m is not None:
             enc = m.groups()[0]
-            print('encoding detected: %s' % enc)
-        print(req1.status_code)
+            self.logger.info('encoding detected: %s' % enc)
+        self.logger.info(req1.status_code)
 
         for line in streamlines_gen(req1):
             print(line)
             if line == 'READY':
-                print('got READY response')
-                print('requesting image')
+                self.logger.info('got READY response')
+                self.logger.info('requesting image')
 
                 try:
                     req2 = requests.get(url2)
                     if self.app_args.http_logging:
-                        logging.info(url2)
+                        self.logger.info(url2)
                 except Exception as ex:
-                    print('Request failed. Please check the connection.')
-                    ReportException('./logs/errors.log', ex)
+                    self.logger.error('Request failed. Please check the connection.')
+                    ReportException('./logs/error.log', ex)
                     raise RequestFailedException()
-                print(req2.status_code)
-                print(req2.headers)
+                self.logger.info(req2.status_code)
+                self.logger.info(req2.headers)
 
                 rec_dict = None
                 with BytesIO() as bytesf:
@@ -395,10 +399,19 @@ class TrackingBasemapHelperClass:
                     bytesf.seek(0)
                     rec_dict = pickle.load(bytesf)
 
+                if self.app_args.comm_debug:
+                    with open('./comm_debug/%s.pickle' % uuid, 'wb') as f:
+                        f.write(req2.content)
+
                 if rec_dict is not None:
                     self.deflate_recieved_dict(rec_dict)
                 else:
                     raise Exception('Generated images transfer failed.')
+
+
+
+
+
 
     def RequestPredictedMCSlabels(self):
         url1 = 'http://%s:%d/exec?command=PredictMCScurrentData&webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
@@ -408,35 +421,35 @@ class TrackingBasemapHelperClass:
             if self.app_args.http_logging:
                 logging.info(url1)
         except Exception as ex:
-            print('Request failed. Please check the connection.')
-            ReportException('./logs/errors.log', ex)
+            self.logger.error('Request failed. Please check the connection.')
+            ReportException('./logs/error.log', ex)
             raise RequestFailedException()
 
-        print(req1.headers)
+        self.logger.info(req1.headers)
         ctype = req1.headers['Content-Type']
         m = re.match(r'.+charset=(.+)', ctype)
         enc = 'utf-8'
         if m is not None:
             enc = m.groups()[0]
-            print('encoding detected: %s' % enc)
-        print(req1.status_code)
+            self.logger.info('encoding detected: %s' % enc)
+        self.logger.info(req1.status_code)
 
         for line in streamlines_gen(req1):
             print(line)
             if line == 'READY':
-                print('got READY response')
-                print('requesting labels')
+                self.logger.info('got READY response')
+                self.logger.info('requesting labels')
 
                 try:
                     req2 = requests.get(url2)
                     if self.app_args.http_logging:
                         logging.info(url2)
                 except Exception as ex:
-                    print('Request failed. Please check the connection.')
-                    ReportException('./logs/errors.log', ex)
+                    self.logger.error('Request failed. Please check the connection.')
+                    ReportException('./logs/error.log', ex)
                     raise RequestFailedException()
-                print(req2.status_code)
-                print(req2.headers)
+                self.logger.info(req2.status_code)
+                self.logger.info(req2.headers)
 
                 rec_dict = None
                 with BytesIO() as bytesf:
@@ -445,9 +458,9 @@ class TrackingBasemapHelperClass:
                     rec_dict = pickle.load(bytesf)
 
                 if rec_dict is not None:
-                    print(rec_dict)
+                    self.logger.info(rec_dict)
                 else:
-                    logging.info('Received empty detected labels.')
+                    self.logger.info('Received empty detected labels.')
                     rec_dict = None
         return rec_dict
 

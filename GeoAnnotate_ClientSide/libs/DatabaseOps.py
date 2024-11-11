@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from .SQLite_queries import *
 from .ServiceDefs import ReportException
@@ -13,7 +14,7 @@ class DatabaseOps():
                 res = c.fetchall()
             return True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex)
+            ReportException('./logs/error.log', ex)
             return False
 
 
@@ -28,7 +29,7 @@ class DatabaseOps():
                 conn.commit()
             return True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex)
+            ReportException('./logs/error.log', ex)
             print("Tracks database was not created.")
             return False
 
@@ -47,7 +48,7 @@ class DatabaseOps():
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
-            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/error.log', ex, sqlite_query=sqlite_query)
             return None
 
 
@@ -64,7 +65,7 @@ class DatabaseOps():
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
-            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/error.log', ex, sqlite_query=sqlite_query)
             return None
 
 
@@ -78,7 +79,7 @@ class DatabaseOps():
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
-            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/error.log', ex, sqlite_query=sqlite_query)
             return None
 
 
@@ -92,7 +93,7 @@ class DatabaseOps():
                 res_data = c.fetchall()
             return res_data
         except Exception as ex:
-            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/error.log', ex, sqlite_query=sqlite_query)
             return None
 
 
@@ -101,8 +102,12 @@ class DatabaseOps():
         vars = [label.uid,
                 datetime.strftime(label.dt, DATETIME_FORMAT_STRING),
                 label.name]
-        for pt_name, pt in label.pts.items():
-            vars = vars + ['%.14f' % pt['lon'], '%.14f' % pt['lat']]
+        
+        if queries_collection.label_types == 'QLL':
+            vars = vars + [json.dumps(label.pts).replace('"', "'")]
+        else:
+            for pt_name, pt in label.pts.items():
+                vars = vars + ['%.14f' % pt['lon'], '%.14f' % pt['lat']]
         vars = vars + [label.sourcedata_fname]
         vars = tuple(vars)
         sqlite_query = queries_collection.INSERT_LABEL_QUERY_TEXT % vars
@@ -115,7 +120,7 @@ class DatabaseOps():
                 conn.commit()
                 return rows_affected if rows_affected>0 else True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/error.log', ex, sqlite_query=sqlite_query)
             # raise ex
             return False
         return
@@ -133,7 +138,7 @@ class DatabaseOps():
                 conn.commit()
                 return rows_affected if rows_affected>0 else True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex, sqlite_query=sqlite_query)
+            ReportException('./logs/error.log', ex, sqlite_query=sqlite_query)
             return False
 
 
@@ -148,7 +153,7 @@ class DatabaseOps():
                 conn.commit()
                 return True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex, sqlite_query = sqlite_query)
+            ReportException('./logs/error.log', ex, sqlite_query = sqlite_query)
             return False
 
 
@@ -164,15 +169,18 @@ class DatabaseOps():
                 conn.commit()
                 return rows_affected if rows_affected > 0 else True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex)
+            ReportException('./logs/error.log', ex)
             return False
 
 
     @classmethod
     def update_label(cls, db_fname, label, queries_collection):
         vars = [datetime.strftime(label.dt, DATETIME_FORMAT_STRING), label.name]
-        for pt_name, pt in label.pts.items():
-            vars = vars + ['%.14f' % pt['lon'], '%.14f' % pt['lat']]
+        if queries_collection.label_types == 'QLL':
+            vars = vars + [json.dumps(label.pts).replace('"', "'")]
+        else:
+            for pt_name, pt in label.pts.items():
+                vars = vars + ['%.14f' % pt['lon'], '%.14f' % pt['lat']]
         vars = vars + [label.uid]
         vars = tuple(vars)
         sqlite_query = queries_collection.UPDATE_LABEL_DATA_QUERY_TEXT % vars
@@ -185,5 +193,5 @@ class DatabaseOps():
                 conn.commit()
                 return rows_affected if rows_affected > 0 else True
         except Exception as ex:
-            ReportException('./logs/errors.log', ex, sqlite_query = sqlite_query)
+            ReportException('./logs/error.log', ex, sqlite_query = sqlite_query)
             return False

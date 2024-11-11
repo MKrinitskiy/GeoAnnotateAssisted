@@ -8,6 +8,9 @@ from libs.sat_service_defs import infer_ncfile_info_from_fname
 import pandas as pd
 from hashlib import md5
 from uuid import uuid4
+from pymongo import MongoClient
+import logging
+import uuid
 
 
 
@@ -19,7 +22,7 @@ class METEOSAT_MCS_DataManager(BaseDataManager):
 
     '''
     from Jean-Claude Thelen and John M. Edwards, "Short-wave radiances: comparison between SEVIRI and the Unified Model"
-    Q. J. R. Meteorol. Soc. 139: 1665–1679, July 2013 B
+    Q. J. R. Meteorol. Soc. 139: 1665-1679, July 2013 B
     DOI:10.1002/qj.2034
 
     | Channel | Band    |    A    |   B   |
@@ -80,12 +83,59 @@ class METEOSAT_MCS_DataManager(BaseDataManager):
 
     # endregion
 
-    def __init__(self, parent, baseDataDirectory='./'):
+    def __init__(self, parent, baseDataDirectory='./', mongo_client=None):
         super().__init__(parent, baseDataDirectory)
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        self.logger = logging.getLogger(__name__)
         self.curr_sat_label = 'None'
+        self.mongo_client = None
+        self.data_sources_collection = None
+        self.connect_to_mongodb()
+
+
+
+    def connect_to_mongodb(self):
+        self.logger.info("Connecting to mongodb")
+        self.mongo_client = MongoClient('mongodb://mongo:27017/')
+        self.logger.info("Connected to mongodb")
+
+        try:
+            dbnames = self.mongo_client.list_database_names()
+        except Exception as e:
+            self.logger.error(f"Failed to list databases: {str(e)}")
+            self.logger.info("Some operations will not be available or may be very slow!!!")
+            self.mongo_client = None
+
+        if 'meteosat_mcs' in dbnames:
+            self.logger.info("Database meteosat_mcs is present")
+            unique_id = uuid.uuid4().hex
+            self.data_sources_collection = self.mongo_client['meteosat_mcs']['data_sources']
+            self.data_sources_collection.insert_one({"_id": unique_id})
+            self.data_sources_collection.delete_one({"_id": unique_id})
+        else:
+            self.logger.error("Database meteosat_mcs is not present. Creating one...")
+            try:
+                meteosat_mcs_database = self.mongo_client['meteosat_mcs']
+                self.logger.info("Database meteosat_mcs created")
+                self.data_sources_collection = meteosat_mcs_database['data_sources']
+                self.data_sources_collection.insert_one({})
+            except Exception as e:
+                self.logger.error(f"Failed to create database meteosat_mcs: {str(e)}")
+                raise e
+
+            self.logger.info("Checking if database is present one more time")
+            dbnames = self.mongo_client.list_database_names()
+            if 'meteosat_mcs' in dbnames:
+                self.logger.info("Database meteosat_mcs is present")
+            else:
+                self.logger.error("Database not present")
+                self.mongo_client.close()
+                self.mongo_client = None
+                self.data_sources_collection = None
+
 
     @classmethod
-    def dt(cls, nc_basename):
+    def dt(cls, nc_basename: str) -> datetime.datetime:
         assert len(nc_basename) > 3
         expr = r'.+(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.nc'
         m = re.match(expr, nc_basename)
@@ -103,15 +153,56 @@ class METEOSAT_MCS_DataManager(BaseDataManager):
 
 
     def ListAvailableData(self, dt_start: datetime.datetime, dt_end: datetime.datetime):
+        
         assert type(dt_start) is datetime.datetime
         assert type(dt_end) is datetime.datetime
 
-        found_fnames = [f for f in find_files(self.baseDataDirectory, '*.nc')]
+        try:
+            # Try to get data from MongoDB
+            self.logger.info("Trying to get data from MongoDB")
+            mongo_docs = list(self.data_sources_collection.find({},
+                {'full_fname': 1, 'dt': 1, 'dt_str': 1, 'MSG_label': 1, '_id': 0}))
+            self.logger.info(f"Found {len(mongo_docs)} records in MongoDB")
 
-        fnames_df = pd.DataFrame(found_fnames, columns=['full_fname'])
-        fnames_df['dt'] = fnames_df['full_fname'].apply(self.dt)
-        fnames_df['dt_str'] = fnames_df['dt'].apply(lambda x: datetime.datetime.strftime(x, '%Y-%m-%d-%H-%M-%S'))
-        fnames_df['MSG_label'] = fnames_df['full_fname'].apply(self.MSG_label)
+            if len(mongo_docs) > 0:
+                try:
+                    fnames_df = pd.DataFrame(mongo_docs)
+                    # Convert string dates back to datetime
+                    fnames_df['dt'] = pd.to_datetime(fnames_df['dt'])
+                except Exception as e:
+                    self.logger.error(f"Failed to convert data from MongoDB: {str(e)}")
+                    raise e
+            else:
+                raise Exception("No documents found in MongoDB")
+        except Exception as e:
+            # Fallback to file system if MongoDB fails
+            found_fnames = [f for f in find_files(self.baseDataDirectory, '*.nc')]
+            fnames_df = pd.DataFrame(found_fnames, columns=['full_fname'])
+            fnames_df['dt'] = fnames_df['full_fname'].apply(self.dt)
+            fnames_df['dt_str'] = fnames_df['dt'].apply(lambda x: datetime.datetime.strftime(x, '%Y-%m-%d-%H-%M-%S'))
+            fnames_df['MSG_label'] = fnames_df['full_fname'].apply(self.MSG_label)
+            # Write data to MongoDB if not already there
+            try:
+                # Convert datetime to string for MongoDB storage
+                records = fnames_df.to_dict('records')
+                for record in records:
+                    record['dt'] = record['dt'].isoformat()
+                
+                # Use update_many to efficiently update multiple records
+                self.data_sources_collection.insert_many(records)
+                # .update_many(
+                #     {'full_fname': {'$in': fnames_df['full_fname'].tolist()}},
+                #     [{'$set': {
+                #         'full_fname': '$$ROOT.full_fname',
+                #         'dt': '$$ROOT.dt',
+                #         'dt_str': '$$ROOT.dt_str', 
+                #         'MSG_label': '$$ROOT.MSG_label'
+                #     }}],
+                #     upsert=True)
+                self.logger.info(f"Wrote {len(records)} source data records to MongoDB")
+            except Exception as e:
+                self.logger.error(f"Failed to write to MongoDB: {str(e)}")
+
         fnames_df_filtered = fnames_df[((fnames_df['dt'] >= dt_start) & (fnames_df['dt'] <= dt_end))]
         fnames_df_filtered = fnames_df_filtered.sort_values('dt')
         fnames_df_filtered['uuid'] = fnames_df_filtered['full_fname'].apply(lambda x: str(uuid4()))
@@ -121,8 +212,13 @@ class METEOSAT_MCS_DataManager(BaseDataManager):
         return fnames_df_filtered.shape[0]
 
 
-    def ReadSourceData(self, dataItemIdentifier):
-        dataSourceFile = dataItemIdentifier
+    def ReadSourceData(self, dataItemDescriptor: dict):
+        # {'full_fname': '/data/nc_2014/2014-05/W_XX-EUMETSAT-Darmstadt,VIS+IR+IMAGERY,MSG3+SEVIRI_C_EUMG_20140501000010.nc',
+        #  'dt': Timestamp('2014-05-01 00:00:10'),
+        #  'dt_str': '2014-05-01-00-00-10',
+        #  'MSG_label': 'MSG3',
+        #  'uuid': 'fc29ddc9-2db2-4a1c-8c1c-b0e96d041b51'}
+        dataSourceFile = dataItemDescriptor['full_fname']
         ds1 = Dataset(dataSourceFile, 'r')
         self.lats = ds1.variables['lat'][:]
         self.lons = ds1.variables['lon'][:]

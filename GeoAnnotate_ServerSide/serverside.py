@@ -21,6 +21,7 @@ import collections
 from libs.parse_args import parse_args
 import ast
 from libs.ProgressOperations import *
+from pymongo import MongoClient
 
 
 args = sys.argv[1:]
@@ -35,9 +36,10 @@ if 'gpu' in args.__dict__.keys():
 app = FlaskExtended(__name__, launch_args = args)
 app.config['SECRET_KEY'] = binascii.hexlify(os.urandom(24))
 
-logging.basicConfig(filename='./logs/app.log', level=logging.INFO, format='%(asctime)s %(message)s')
-logging.info('Started AI-assisted GeoAnnotate server-side app')
-logging.info('args: %s' % sys.argv[1:])
+logging.basicConfig(filename='./logs/app.log', level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('serverside.py')
+logger.info('Started AI-assisted GeoAnnotate server-side app')
+logger.info('args: %s' % sys.argv[1:])
 
 
 @app.route('/')
@@ -47,8 +49,6 @@ def main():
     return response
 
 
-
-# @app.route('/exec', methods=['POST', 'GET'])
 @app.route('/exec', methods=['GET'])
 def exec():
     command = request.args['command']
@@ -290,4 +290,4 @@ def imdone():
 
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=args.port)
+    app.run(host='0.0.0.0', port=args.port)

@@ -1,3 +1,4 @@
+import logging
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -12,8 +13,6 @@ CURSOR_DRAW = Qt.CrossCursor
 CURSOR_MOVE = Qt.ClosedHandCursor
 CURSOR_GRAB = Qt.OpenHandCursor
 
-# class Canvas(QGLWidget):
-
 
 class Canvas(QWidget):
     zoomRequest = pyqtSignal(int)
@@ -24,7 +23,7 @@ class Canvas(QWidget):
     shapeMovesFinished = pyqtSignal()
     drawingPolygon = pyqtSignal(bool)
 
-    CREATE, EDIT, CREATEELLIPSE = list(range(3))
+    CREATE, EDIT, CREATEELLIPSE, CREATEQLLABEL = list(range(4))
 
     epsilon = 11.0
 
@@ -45,10 +44,12 @@ class Canvas(QWidget):
             self.shapes_points_count = 2
         elif self.parent.label_types == 'CS':
             self.shapes_points_count = 3
+        elif self.parent.label_types == 'QLL':
+            self.shapes_points_count = None
 
         self.mode = self.EDIT
         self.shapes = []
-        self.current = None
+        self.currentShape = None
         self.selectedShape = None  # save the selected shape here
         # self.curr_dt = None
 
@@ -74,6 +75,8 @@ class Canvas(QWidget):
         self.setFocusPolicy(Qt.WheelFocus)
         self.verified = False
 
+        self.logger = logging.getLogger(__name__)
+
 
 
     def setDrawingColor(self, qColor):
@@ -95,16 +98,33 @@ class Canvas(QWidget):
     def drawing(self):
         return self.mode == self.CREATE
 
-
     def drawing_ellipse(self):
         return self.mode == self.CREATEELLIPSE
 
+    def drawing_qllabel(self):
+        return self.mode == self.CREATEQLLABEL
 
     def editing(self):
         return self.mode == self.EDIT
 
     def setEditing(self, value=True):
-        self.mode = self.EDIT if value else self.CREATEELLIPSE
+        if value:
+            if self.parent.label_types == 'QLL':
+                self.mode = self.CREATEQLLABEL
+            elif self.parent.label_types == 'MCS':
+                self.mode = self.CREATEELLIPSE
+            elif ((self.parent.label_types == 'MC') or (self.parent.label_types == 'PL') or (self.parent.label_types == 'AMRC')):
+                self.mode = self.CREATE
+            else:
+                self.mode = self.EDIT
+        else:
+            if self.parent.label_types == 'QLL':
+                self.mode = self.CREATEQLLABEL
+            elif ((self.parent.label_types == 'MC') or (self.parent.label_types == 'PL') or (self.parent.label_types == 'AMRC')):
+                self.mode = self.CREATEELLIPSE
+            else:
+                self.mode = self.CREATE
+
         if not value:  # Create
             self.unHighlight()
             self.deSelectShape()
@@ -133,28 +153,27 @@ class Canvas(QWidget):
 
         self.mousePosLatLon = QPointF(posLon, posLat)
 
-        # Polygon drawing.
         if self.drawing_ellipse():
             return
         elif self.drawing():
             self.overrideCursor(CURSOR_DRAW)
-            if self.current:
+            if self.currentShape:
                 color = self.drawingLineColor
                 if self.outOfPixmap(pos):
                     # Don't allow the user to draw outside the pixmap.
                     # Project the point to the pixmap's edges.
-                    pos = self.intersectionPoint(self.current[-1], pos)
-                elif len(self.current) > 1 and self.closeEnough(pos, self.current[0]):
+                    pos = self.intersectionPoint(self.currentShape[-1], pos)
+                elif len(self.currentShape) > 1 and self.closeEnough(pos, self.currentShape[0]):
                     # Attract line to starting point and colorise to alert the
                     # user:
-                    pos = self.current[0]
-                    color = self.current.line_color
+                    pos = self.currentShape[0]
+                    color = self.currentShape.line_color
                     self.overrideCursor(CURSOR_POINT)
-                    self.current.highlightVertex(0, Shape.NEAR_VERTEX)
+                    self.currentShape.highlightVertex(0, Shape.NEAR_VERTEX)
                 # self.line[1] = pos
                 # self.line.line_color = color
                 self.prevPoint = QPointF()
-                self.current.highlightClear()
+                self.currentShape.highlightClear()
             else:
                 self.prevPoint = pos
             self.repaint()
@@ -227,16 +246,20 @@ class Canvas(QWidget):
 
         self.recalculateMovedLatlonPointsSelectedShape()
 
+
+
     def mousePressEvent(self, ev):
         pos = self.transformPos(ev.pos())
 
         if ev.button() == Qt.LeftButton:
-            if self.drawing() | self.drawing_ellipse():
+            if self.drawing() or self.drawing_ellipse() or self.drawing_qllabel():
                 self.handleDrawing(pos)
             else:
                 self.selectShapePoint(pos)
                 self.prevPoint = pos
                 self.repaint()
+        elif ev.button() == Qt.RightButton and self.drawing_qllabel():
+            self.finishDrawingQLLabel(pos)
         elif ev.button() == Qt.RightButton and self.editing():
             self.selectShapePoint(pos)
             self.prevPoint = pos
@@ -284,38 +307,48 @@ class Canvas(QWidget):
             self.repaint()
 
     def handleDrawing(self, pos):
-        if self.current:
+        if self.currentShape:
             posLon, posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
             qptLatLon = QPointF(posLon, posLat)
-            # self.current.addPoint(pos, self.transformToLatLon(pos, True))
-            self.current.addPoint(pos, qptLatLon)
-            if len(self.current) == self.shapes_points_count:
-                self.current.close()
+            
+            self.currentShape.addPoint(pos, qptLatLon)
+            if len(self.currentShape) == self.shapes_points_count:
+                self.currentShape.close()
                 self.finalise()
         elif not self.outOfPixmap(pos):
-            self.current = Shape(parent_canvas=self)
+            self.currentShape = Shape(parent_canvas=self)
 
             posLon, posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
             qptLatLon = QPointF(posLon, posLat)
             # self.current.addPoint(pos, self.transformToLatLon(pos, True))
-            self.current.addPoint(pos, qptLatLon)
+            self.currentShape.addPoint(pos, qptLatLon)
 
             self.recalculateMovedLatlonPointsSelectedShape()
 
             self.update()
+    
+
+    def finishDrawingQLLabel(self, pos):
+        self.currentShape.close()
+        self.finalise()
+
 
     def setHiding(self, enable=True):
         self._hideBackround = self.hideBackround if enable else False
 
     def canCloseShape(self):
-
-        return self.drawing() and self.current and len(self.current) >= self.shapes_points_count-1
+        if ((self.drawing() or self.drawing_qllabel() or self.drawing_ellipse()) and self.currentShape):
+            if (self.shapes_points_count is None):
+                return True
+            else:
+                return (len(self.currentShape) > self.shapes_points_count)
+        return False
 
     def mouseDoubleClickEvent(self, ev):
         # We need at least 4 points here, since the mousePress handler
         # adds an extra one before this handler is called.
-        if self.canCloseShape() and len(self.current) > self.shapes_points_count:
-            self.current.popPoint()
+        if self.canCloseShape():
+            # self.currentShape.popPoint()
             self.finalise()
 
     def selectShape(self, shape):
@@ -422,14 +455,13 @@ class Canvas(QWidget):
         Shape.scale = self.scale
         for shape in self.shapes:
             if (shape.selected or not self._hideBackround) and self.isVisible(shape):
-                shape.fill = shape.selected or shape == self.hShape
-                # shape.paint(p)
+                if shape.label_type == 'QLL': 
+                    shape.fill = False
+                else:
+                    shape.fill = shape.selected or shape == self.hShape
                 shape.paint()
-        if self.current:
-            # self.current.paint(p)
-            # self.line.paint(p)
-            self.current.paint()
-            # self.line.paint(self.current._painter)
+        if self.currentShape:
+            self.currentShape.paint()
         if self.selectedShapeCopy:
             # self.selectedShapeCopy.paint(p)
             self.selectedShapeCopy.paint()
@@ -513,19 +545,20 @@ class Canvas(QWidget):
         return not (0 <= p.x() <= w and 0 <= p.y() <= h)
 
     def finalise(self):
-        assert self.current
-        if self.current.points[0] == self.current.points[-1]:
-            self.current = None
+        assert self.currentShape
+        if self.currentShape.points[0] == self.currentShape.points[-1]:
+            self.currentShape = None
             self.drawingPolygon.emit(False)
             self.update()
             return
 
-        self.current.close()
-        self.shapes.append(self.current)
-        self.current = None
+        self.currentShape.close()
+        self.shapes.append(self.currentShape)
+        self.currentShape = None
         self.setHiding(False)
         self.newShape.emit()
         self.update()
+        self.mode = self.EDIT
 
     def closeEnough(self, p1, p2):
         return distance(p1 - p2) < self.epsilon
@@ -612,9 +645,9 @@ class Canvas(QWidget):
 
     def keyPressEvent(self, ev):
         key = ev.key()
-        if key == Qt.Key_Escape and self.current:
-            print('ESC press')
-            self.current = None
+        if key == Qt.Key_Escape and self.currentShape:
+            self.logger.info('ESC press')
+            self.currentShape = None
             self.drawingPolygon.emit(False)
             self.update()
         elif key == Qt.Key_Return and self.canCloseShape():
@@ -629,20 +662,16 @@ class Canvas(QWidget):
             self.moveOnePixel('Down')
 
     def moveOnePixel(self, direction):
-        # print(self.selectedShape.points)
         if direction == 'Left' and not self.moveOutOfBound(QPointF(-1.0, 0)):
             for i in range(self.shapes_points_count):
                 self.selectedShape.points[i] += QPointF(-1.0, 0)
         elif direction == 'Right' and not self.moveOutOfBound(QPointF(1.0, 0)):
-            # print("move Right one pixel")
             for i in range(self.shapes_points_count):
                 self.selectedShape.points[i] += QPointF(1.0, 0)
         elif direction == 'Up' and not self.moveOutOfBound(QPointF(0, -1.0)):
-            # print("move Up one pixel")
             for i in range(self.shapes_points_count):
                 self.selectedShape.points[i] += QPointF(0, -1.0)
         elif direction == 'Down' and not self.moveOutOfBound(QPointF(0, 1.0)):
-            # print("move Down one pixel")
             for i in range(self.shapes_points_count):
                 self.selectedShape.points[i] += QPointF(0, 1.0)
 
@@ -667,20 +696,13 @@ class Canvas(QWidget):
 
         return self.shapes[-1]
 
-    # def undoLastLine(self):
-    #     assert self.shapes
-    #     self.current = self.shapes.pop()
-    #     self.current.setOpen()
-    #     self.line.points = [self.current[-1], self.current[0]]
-    #     self.drawingPolygon.emit(True)
-
     def resetAllLines(self):
         assert self.shapes
-        self.current = self.shapes.pop()
-        self.current.setOpen()
-        # self.line.points = [self.current[-1], self.current[0]]
+        self.currentShape = self.shapes.pop()
+        self.currentShape.setOpen()
+        
         self.drawingPolygon.emit(True)
-        self.current = None
+        self.currentShape = None
         self.drawingPolygon.emit(False)
         self.update()
 
@@ -695,7 +717,7 @@ class Canvas(QWidget):
             self.shapes.extend(list(shapes))
         else:
             self.shapes = list(shapes)
-        self.current = None
+        self.currentShape = None
         self.repaint()
 
 
@@ -713,13 +735,13 @@ class Canvas(QWidget):
         self.selectedTemporaryShape = self.selectedShape
         self.shapes = self.bmShapes
         self.selectedShape = self.selectedBmShape
-        self.current = None
+        self.currentShape = None
         self.repaint()
 
     def switchBackBasemapAndMainShapes(self):
         self.shapes = self.temporaryShapes
         self.selectedShape = self.selectedTemporaryShape
-        self.current = None
+        self.currentShape = None
         self.repaint()
 
 

@@ -24,15 +24,17 @@ def parse_args(args):
                         help="""Directory containing pre-computed projection and interpolation constants """)
 
     parser.add_argument('--data-type', dest='data_type', type=str,
-                        default='METEOSAT-MCS', choices = ['METEOSAT-MCS', 'NAAD-PL', 'AMRC-MC', 'NAAD-CS'],
+                        default='METEOSAT-MCS', choices = ['METEOSAT-MCS', "METEOSAT-QLL", 'NAAD-PL', 'AMRC-MC', 'NAAD-CS'],
                         help="""Switching between labeling problems: \n
                         METEOSAT-MCS - for tracking (M)esoscale (C)onvective (S)ystems 
                         in METEOSAT remote sensing imagery; \n
-                        NAAD-PL - for tracking (M)esoscale (C)yclones (a.k.a. (P)olar (L)ows) 
+                        METEOSAT-QLL - for tracking (Q)uasi-(L)inear (L)abeled phenomena) 
+                        in METEOSAT remote sensing imagery; \n
+                        NAAD-PL - for tracking Mesoscale Cyclones (a.k.a. (P)olar (L)ows) 
                         in NAAD atmospheric modeling data \n
-                        AMRC-MC - for tracking mesoscale cyclones or polar lows 
+                        AMRC-MC - for tracking (M)esoscale (C)yclones (or polar lows)
                         in AMRC remote sensing mosaics in Southern ocean \n
-                        NAAD-CS - for tracking (C)oherent (Structures) in NAAD atmospheric modeling data.""")
+                        NAAD-CS - for tracking (C)oherent (S)tructures in NAAD atmospheric modeling data.""")
 
     parser.add_argument('--port', '-p', dest='port', type=int, default=1999,
                         help='''Port for the server to listen to''')

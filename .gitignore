@@ -133,3 +133,5 @@ dev/
 .vscode
 GAAmediator
 GAAmediator/**
+**/comm_debug
+**/config/config.env

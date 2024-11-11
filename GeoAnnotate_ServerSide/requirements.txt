@@ -1,0 +1,15 @@
+PyYAML
+pymongo==4.3.3
+python-dotenv==0.21.0
+pika
+numpy
+minio
+basemap
+basemap-data
+basemap-data-hires
+flask
+opencv-python
+Pillow
+pandas
+netcdf4
+scipy

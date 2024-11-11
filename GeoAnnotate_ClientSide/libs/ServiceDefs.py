@@ -60,7 +60,7 @@ def EnsureDirectoryExists(pathStr):
         try:
             pathlib.Path(pathStr).mkdir(parents=True, exist_ok=True)
         except Exception as ex:
-            err_fname = './logs/errors.log'
+            err_fname = './logs/error.log'
             exc_type, exc_value, exc_traceback = sys.exc_info()
             with open(err_fname, 'a') as errf:
                 traceback.print_tb(exc_traceback, limit=None, file=errf)
