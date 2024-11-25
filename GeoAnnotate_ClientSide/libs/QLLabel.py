@@ -6,8 +6,9 @@ import pandas as pd
 import numpy as np
 from .SQLite_queries import SQLite_Queries
 
+
 class QuasiLinearLabel:
-    def __init__(self, name, uid, dt, pts, widths, sourcedata_fname):
+    def __init__(self, name, uid, dt, pts, widthkeypoints, sourcedata_fname):
         """
         Initialize a QuasiLinearLabel.
 
@@ -15,19 +16,16 @@ class QuasiLinearLabel:
         :param uid: Unique identifier for the label
         :param dt: Date and time associated with the label
         :param pts: List of points defining the piecewise straight line
-        :param widths: List of radii defining the width of the line at each point
+        :param widthkeypoints: List of circles, each circle is a dict with 'latc', 'lonc', 'lat_arc', 'lon_arc'
         :param sourcedata_fname: Identifier for the source data
         """
         self.name = name
         self.uid = uid
         self.dt = dt
         self.pts = pts  # List of points, each point is a dict with 'lat' and 'lon'
-        self.widths = widths
+        self.widthkeypoints = widthkeypoints # List of circles, each circle is a dict with 'latc', 'lonc', 'lat_arc', 'lon_arc'
         self.sourcedata_fname = sourcedata_fname
     
-    # @property
-    # def pts(self):
-    #     return self.points
 
     @classmethod
     def from_db_row_dict(cls, row_dict):
@@ -52,6 +50,16 @@ class QuasiLinearLabel:
             points_list.append({'lat': points[pt_key]['lat'],
                                 'lon': points[pt_key]['lon']})
         label.pts = points_list
+
+        widthkeypoints_json = row_dict['widthkeypoints']  # This should be a list of tuples [(latc, lonc, lat_arc, lon_arc), ...]
+        widthkeypoints = json.loads(widthkeypoints_json.replace("'", '"'))
+        # Convert dictionary of circles to list of circles
+        widthkeypoints_list = []
+        for circle_key in sorted(widthkeypoints.keys()):  # Sort to maintain order pt0, pt1, pt2
+            widthkeypoints_list.append({'latc': widthkeypoints[circle_key]['lat'],
+                                        'lonc': widthkeypoints[circle_key]['lon']})
+        label.widthkeypoints = widthkeypoints_list
+        
         return label
 
 
@@ -66,7 +74,8 @@ class QuasiLinearLabel:
                                                                       'label_dt',
                                                                       'label_name',
                                                                       'sourcedata_fname',
-                                                                      'pts'])
+                                                                      'pts',
+                                                                      'widthkeypoints'])
             data_read_df['label_dt'] = pd.to_datetime(data_read_df['label_dt'])
             for idx,row in data_read_df.iterrows():
                 labeldata_dict = row.to_dict()

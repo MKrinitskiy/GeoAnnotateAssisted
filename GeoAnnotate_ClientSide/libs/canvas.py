@@ -216,12 +216,23 @@ class Canvas(QWidget):
         for shape in reversed([s for s in self.shapes if self.isVisible(s)]):
             # Look for a nearby vertex to highlight. If that fails,
             # check if we happen to be inside a shape.
-            index = shape.nearestVertex(pos, self.epsilon)
-            if index is not None:
+            indexOfRegularVertex = shape.nearestVertex(pos, self.epsilon)
+            indexOfWidthVertex = shape.nearestWidthVertex(pos, self.epsilon)
+            if indexOfRegularVertex is not None:
                 if self.selectedVertex():
                     self.hShape.highlightClear()
-                self.hVertex, self.hShape = index, shape
-                shape.highlightVertex(index, shape.MOVE_VERTEX)
+                self.hVertex, self.hShape = indexOfRegularVertex, shape
+                shape.highlightVertex(indexOfRegularVertex, shape.MOVE_VERTEX)
+                self.overrideCursor(CURSOR_POINT)
+                self.setToolTip("Click & drag to move point")
+                self.setStatusTip(self.toolTip())
+                self.update()
+                break
+            elif indexOfWidthVertex is not None:
+                if self.selectedVertex():
+                    self.hShape.highlightClear()
+                self.hVertex, self.hShape = indexOfWidthVertex, shape
+                shape.highlightWidthVertex(indexOfWidthVertex, shape.MOVE_VERTEX)
                 self.overrideCursor(CURSOR_POINT)
                 self.setToolTip("Click & drag to move point")
                 self.setStatusTip(self.toolTip())
@@ -306,12 +317,20 @@ class Canvas(QWidget):
             self.setHiding(True)
             self.repaint()
 
-    def handleDrawing(self, pos):
+    def handleDrawing(self, pos: QPointF):
         if self.currentShape:
             posLon, posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
             qptLatLon = QPointF(posLon, posLat)
             
-            self.currentShape.addPoint(pos, qptLatLon)
+            
+            if self.parent.label_types == 'QLL':
+                widthkeypoint = pos + QPointF(20, 20)
+                widthkeypointLon, widthkeypointLat = self.parent.basemaphelper.xy2latlon(widthkeypoint.x(), widthkeypoint.y())
+                latlonWidthKeyPoint = QPointF(widthkeypointLat, widthkeypointLon)
+                self.currentShape.addQLLpoint(pos, qptLatLon, widthkeypoint, latlonWidthKeyPoint)
+            else:
+                self.currentShape.addPoint(pos, qptLatLon)
+
             if len(self.currentShape) == self.shapes_points_count:
                 self.currentShape.close()
                 self.finalise()

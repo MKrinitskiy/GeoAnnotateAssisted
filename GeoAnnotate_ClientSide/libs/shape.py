@@ -80,8 +80,10 @@ class Shape(object):
             self.shape_type = shape_types.qllabel
 
         self.points = []
-        self.radii = []
         self.latlonPoints = []
+        if self.shape_type == shape_types.qllabel:
+            self.widthkeypoints = []
+            self.latlonWidthkeypoints = []
         self.selected = False
         self.paintLabel = paintLabel
         self.fill = False
@@ -109,6 +111,12 @@ class Shape(object):
             self.NEAR_VERTEX: (4, self.P_ROUND),
             self.MOVE_VERTEX: (1.5, self.P_SQUARE),
         }
+        self._highlightWidthIndex = None
+        self._highlightWidthMode = self.NEAR_VERTEX
+        self._highlightWidthSettings = {
+            self.NEAR_VERTEX: (4, self.P_ROUND),
+            self.MOVE_VERTEX: (1.5, self.P_SQUARE),
+        }
 
         self._closed = False
 
@@ -127,19 +135,31 @@ class Shape(object):
         if not self.reachMaxPoints():
             self.points.append(point)
             self.latlonPoints.append(latlonPoint)
-            # if self.shape_type == shape_types.qllabel:
-                # if isinstance(self.label, QuasiLinearLabel):
-                    # self.
-                    # self.label.pts.append(latlonPoint)
-        # self.paint()
+    
+    def addQLLpoint(self, point, latlonPoint, widthkeypoint, latlonWidthKeyPoint):
+        self.parent_canvas.logger.info(f'addQLLpoint: {point}, {latlonPoint}, {widthkeypoint}, {latlonWidthKeyPoint}')
+        if not self.reachMaxPoints():
+            self.points.append(point)
+            self.latlonPoints.append(latlonPoint)
+            self.widthkeypoints.append(widthkeypoint)
+            self.latlonWidthkeypoints.append(latlonWidthKeyPoint)
 
     def popPoint(self, latlon = False):
-        self.parent_canvas.logger.info(f'popPoint: {latlon}')
-        if self.points:
+        if self.shape_type == shape_types.qllabel:
             if latlon:
-                return self.latlonPoints.pop()
+                pt = self.latlonPoints.pop()
+                wkp = self.latlonWidthkeypoints.pop()
             else:
-                return self.points.pop()
+                pt = self.points.pop()
+                wkp = self.widthkeypoints.pop()
+            return pt, wkp
+        else:
+            self.parent_canvas.logger.info(f'popPoint: {latlon}')
+            if self.points:
+                if latlon:
+                    return self.latlonPoints.pop()
+                else:
+                    return self.points.pop()
         return None
 
     def isClosed(self):
@@ -167,11 +187,7 @@ class Shape(object):
                 color = self.select_fill_color if self.selected else self.fill_color
                 self._painter.setBrush(color)
 
-            if self.shape_type == shape_types.qllabel:
-                # self._painter.drawPath()
-
-                # line_path = self.makePath()
-                
+            if self.shape_type == shape_types.qllabel:               
                 vrtx_path = QPainterPath()
                 width_path = QPainterPath()
 
@@ -180,7 +196,8 @@ class Shape(object):
                 for i, p in enumerate(self.points):
                     line_path.lineTo(p)
                     self.drawVertex(vrtx_path, i)
-                    self.drawWidthCircle(width_path, i)
+                for i, p in enumerate(self.widthkeypoints):
+                    self.drawWidthCircle(width_path, vrtx_path, i)
                 
                 self._painter.drawPath(line_path)
                 self._painter.drawPath(width_path)
@@ -280,7 +297,6 @@ class Shape(object):
 
     def drawVertex(self, path, i):
         d = self.point_size / self.scale
-        shape = self.point_type
 
         # TODO: perhaps convert latlonPoints to points in order to draw
 
@@ -288,34 +304,63 @@ class Shape(object):
         if i == self._highlightIndex:
             size, shape = self._highlightSettings[self._highlightMode]
             d *= size
+        
         if self._highlightIndex is not None:
             self.vertex_fill_color = self.hvertex_fill_color
         else:
             self.vertex_fill_color = Shape.vertex_fill_color
 
-        if shape == self.P_SQUARE:
+        if self.point_type == self.P_SQUARE:
             path.addRect(point.x() - d / 2, point.y() - d / 2, d, d)
-        elif shape == self.P_ROUND:
+        elif self.point_type == self.P_ROUND:
             path.addEllipse(point, d / 2.0, d / 2.0)
         else:
             assert False, "unsupported vertex shape"
     
 
-    def drawWidthCircle(self, path, i):
+    def drawWidthVertex(self, path, i):
+        d = self.point_size / self.scale
+        if i == self._highlightIndex:
+            size, shape = self._highlightSettings[self._highlightMode]
+            d *= size
+        
+        widthkeypoint = self.widthkeypoints[i]
+        path.addEllipse(widthkeypoint, d / 2.0, d / 2.0)
+
+
+    def drawWidthCircle(self, width_path, vrtx_path, i):
         # TODO: perhaps convert latlonPoints to points in order to draw
+        # 
+        
+        self.drawWidthVertex(vrtx_path, i)
 
         point = self.points[i]
-        radius = 2*self.point_size
+        widthkeypoint = self.widthkeypoints[i]
+        x0 = point.x()
+        x1 = widthkeypoint.x()
+        y0 = point.y()
+        y1 = widthkeypoint.y()
+        dx = x1 - x0
+        dy = y1 - y0
+        r = np.sqrt(dx * dx + dy * dy)
 
-        path.addEllipse(point, radius, radius)
+        width_path.addEllipse(point, r, r)
 
-
-
+        
     def nearestVertex(self, point, epsilon):
 
         # TODO: perhaps convert latlonPoints to points
 
         for i, p in enumerate(self.points):
+            if distance(p - point) <= epsilon:
+                return i
+        return None
+    
+    def nearestWidthVertex(self, point, epsilon):
+
+        # TODO: perhaps convert latlonPoints to points
+
+        for i, p in enumerate(self.widthkeypoints):
             if distance(p - point) <= epsilon:
                 return i
         return None
@@ -356,14 +401,21 @@ class Shape(object):
     def highlightVertex(self, i, action):
         self._highlightIndex = i
         self._highlightMode = action
+    
+    def highlightWidthVertex(self, i, action):
+        self._highlightWidthIndex = i
+        self._highlightWidthMode = action
 
     def highlightClear(self):
         self._highlightIndex = None
+        self._highlightWidthIndex = None
 
     def copy(self):
         shape = Shape(self.label, parent_canvas=self.parent_canvas)
         shape.points = [p for p in self.points]
         shape.latlonPoints = [p for p in self.latlonPoints]
+        shape.widthkeypoints = [p for p in self.widthkeypoints]
+        shape.latlonWidthkeypoints = [p for p in self.latlonWidthkeypoints]
         shape.fill = self.fill
         shape.selected = self.selected
         shape._closed = self._closed
