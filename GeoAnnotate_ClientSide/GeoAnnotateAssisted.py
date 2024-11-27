@@ -1180,11 +1180,11 @@ class MainWindow(QMainWindow):
         # MK: set latlon points of the new shape to pts of the label of this shape
         new_shape = self.canvas.shapes[-1]
         pts = {}
-        for i in range(len(new_shape.points)):
-            lon = new_shape.latlonPoints[i].x()
-            lat = new_shape.latlonPoints[i].y()
+        for uid,latlonpoint in new_shape.latlonPoints.items():
+            lon = new_shape.latlonPoints[uid].qtpoint.x()
+            lat = new_shape.latlonPoints[uid].qtpoint.y()
             pt = {'lat': lat, 'lon': lon}
-            pts['pt%d'%i] = pt
+            pts[uid] = pt
         new_shape.label.pts = pts
 
         new_shape.label.sourcedata_fname = os.path.basename(self.filePath)
@@ -1202,11 +1202,11 @@ class MainWindow(QMainWindow):
         self.setDirty()
         selected_shape = self.canvas.selectedShape
         pts = {}
-        for i in range(len(selected_shape.latlonPoints)):
-            lon = selected_shape.latlonPoints[i].x()
-            lat = selected_shape.latlonPoints[i].y()
+        for uid,latlonpoint in selected_shape.latlonPoints.items():
+            lon = selected_shape.latlonPoints[uid].qtpoint.x()
+            lat = selected_shape.latlonPoints[uid].qtpoint.y()
             pt = {'lat': lat, 'lon': lon}
-            pts['pt%d'%i] = pt
+            pts[uid] = pt
         selected_shape.label.pts = pts
         selected_shape.label.sourcedata_fname = os.path.basename(self.filePath)
         self.setDirty()
@@ -1501,12 +1501,12 @@ class MainWindow(QMainWindow):
             return False
 
 
-
+        
         self.imageData = self.basemaphelper.CVimageCombined
         self.imageData = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2RGB)
         self.actions.switchDataChannel.setText(self.basemaphelper.channelsDescriptions[self.basemaphelper.currentChannel])
 
-        height, width, channel = self.basemaphelper.CVimageCombined.shape
+        height, width, channel = self.imageData.shape
         bytesPerLine = 3 * width
         image = QImage(self.imageData, width, height, bytesPerLine, QImage.Format_RGB888)
 

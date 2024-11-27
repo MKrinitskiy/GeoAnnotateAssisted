@@ -65,7 +65,7 @@ class Canvas(QWidget):
         self._hideBackround = False
         self.hideBackround = False
         self.hShape = None
-        self.hVertex = None
+        self.hVertexUID = None
         self._painter = QPainter()
         self._cursor = CURSOR_DEFAULT
         # Menus:
@@ -134,10 +134,10 @@ class Canvas(QWidget):
     def unHighlight(self):
         if self.hShape:
             self.hShape.highlightClear()
-        self.hVertex = self.hShape = None
+        self.hVertexUID = self.hShape = None
 
     def selectedVertex(self):
-        return self.hVertex is not None
+        return self.hVertexUID is not None
 
     def mouseMoveEvent(self, ev):
         """Update line with last point and current coordinates."""
@@ -216,23 +216,16 @@ class Canvas(QWidget):
         for shape in reversed([s for s in self.shapes if self.isVisible(s)]):
             # Look for a nearby vertex to highlight. If that fails,
             # check if we happen to be inside a shape.
-            indexOfRegularVertex = shape.nearestVertex(pos, self.epsilon)
-            indexOfWidthVertex = shape.nearestWidthVertex(pos, self.epsilon)
-            if indexOfRegularVertex is not None:
+
+            uidOfNearestVertex = shape.nearestVertex(pos, self.epsilon)
+            if uidOfNearestVertex is not None:
                 if self.selectedVertex():
-                    self.hShape.highlightClear()
-                self.hVertex, self.hShape = indexOfRegularVertex, shape
-                shape.highlightVertex(indexOfRegularVertex, shape.MOVE_VERTEX)
-                self.overrideCursor(CURSOR_POINT)
-                self.setToolTip("Click & drag to move point")
-                self.setStatusTip(self.toolTip())
-                self.update()
-                break
-            elif indexOfWidthVertex is not None:
-                if self.selectedVertex():
-                    self.hShape.highlightClear()
-                self.hVertex, self.hShape = indexOfWidthVertex, shape
-                shape.highlightWidthVertex(indexOfWidthVertex, shape.MOVE_VERTEX)
+                    try:
+                        self.hShape.highlightClear()
+                    except:
+                        pass
+                self.hVertexUID, self.hShape = uidOfNearestVertex, shape
+                shape.highlightVertex(uidOfNearestVertex, shape.MOVE_VERTEX)
                 self.overrideCursor(CURSOR_POINT)
                 self.setToolTip("Click & drag to move point")
                 self.setStatusTip(self.toolTip())
@@ -252,7 +245,7 @@ class Canvas(QWidget):
             if self.hShape:
                 self.hShape.highlightClear()
                 self.update()
-            self.hVertex, self.hShape = None, None
+            self.hVertexUID, self.hShape = None, None
             self.overrideCursor(CURSOR_DEFAULT)
 
         self.recalculateMovedLatlonPointsSelectedShape()
@@ -303,7 +296,8 @@ class Canvas(QWidget):
     def endMove(self):
         assert self.selectedShape and self.selectedShapeCopy
         shape = self.selectedShapeCopy
-        self.selectedShape.points = [p for p in shape.points]
+        self.selectedShape.points = dict([(uid,pt) for uid,pt in shape.points.items()])
+        self.selectedShape.points_uids = shape.points_uids
         self.selectedShapeCopy = None
         self.recalculateMovedLatlonPointsSelectedShape()
 
@@ -318,38 +312,33 @@ class Canvas(QWidget):
             self.repaint()
 
     def handleDrawing(self, pos: QPointF):
-        if self.currentShape:
-            posLon, posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
-            qptLatLon = QPointF(posLon, posLat)
-            
-            
-            if self.parent.label_types == 'QLL':
-                widthkeypoint = pos + QPointF(20, 20)
-                widthkeypointLon, widthkeypointLat = self.parent.basemaphelper.xy2latlon(widthkeypoint.x(), widthkeypoint.y())
-                latlonWidthKeyPoint = QPointF(widthkeypointLat, widthkeypointLon)
-                self.currentShape.addQLLpoint(pos, qptLatLon, widthkeypoint, latlonWidthKeyPoint)
-            else:
-                self.currentShape.addPoint(pos, qptLatLon)
-
-            if len(self.currentShape) == self.shapes_points_count:
-                self.currentShape.close()
-                self.finalise()
-        elif not self.outOfPixmap(pos):
+        if ((not self.currentShape) and (not self.outOfPixmap(pos))):
             self.currentShape = Shape(parent_canvas=self)
 
-            posLon, posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
-            qptLatLon = QPointF(posLon, posLat)
-            # self.current.addPoint(pos, self.transformToLatLon(pos, True))
+        
+        posLon, posLat = self.parent.basemaphelper.xy2latlon(pos.x(), pos.y())
+        qptLatLon = QPointF(posLon, posLat)
+        
+        
+        if self.parent.label_types == 'QLL':
+            widthkeypoint = pos + QPointF(20, 20)
+            widthkeypointLon, widthkeypointLat = self.parent.basemaphelper.xy2latlon(widthkeypoint.x(), widthkeypoint.y())
+            latlonWidthKeyPoint = QPointF(widthkeypointLat, widthkeypointLon)
+            self.currentShape.addQLLpoint(pos, qptLatLon, widthkeypoint, latlonWidthKeyPoint)
+        else:
             self.currentShape.addPoint(pos, qptLatLon)
 
-            self.recalculateMovedLatlonPointsSelectedShape()
-
-            self.update()
+        if len(self.currentShape) == self.shapes_points_count:
+            self.currentShape.close()
+            self.finalizeShape()
+        
+        self.recalculateMovedLatlonPointsSelectedShape()
+        self.update()
     
 
     def finishDrawingQLLabel(self, pos):
         self.currentShape.close()
-        self.finalise()
+        self.finalizeShape()
 
 
     def setHiding(self, enable=True):
@@ -368,7 +357,7 @@ class Canvas(QWidget):
         # adds an extra one before this handler is called.
         if self.canCloseShape():
             # self.currentShape.popPoint()
-            self.finalise()
+            self.finalizeShape()
 
     def selectShape(self, shape):
         self.deSelectShape()
@@ -382,8 +371,8 @@ class Canvas(QWidget):
         """Select the first shape created which contains this point."""
         self.deSelectShape()
         if self.selectedVertex():  # A vertex is marked for selection.
-            index, shape = self.hVertex, self.hShape
-            shape.highlightVertex(index, shape.MOVE_VERTEX)
+            vrtxUID, shape = self.hVertexUID, self.hShape
+            shape.highlightVertex(vrtxUID, shape.MOVE_VERTEX)
             self.selectShape(shape)
             return
         for shape in reversed(self.shapes):
@@ -401,13 +390,13 @@ class Canvas(QWidget):
         self.offsets = QPointF(x1, y1), QPointF(x2, y2)
 
     def boundedMoveVertex(self, pos):
-        index, shape = self.hVertex, self.hShape
-        point = shape[index]
+        vrtxUID, shape = self.hVertexUID, self.hShape
+        point = shape[vrtxUID]
         if self.outOfPixmap(pos):
             pos = self.intersectionPoint(point, pos)
 
-        shiftPos = pos - point
-        shape.moveVertexBy(index, shiftPos)
+        shiftPos = pos - point.qtpoint
+        shape.moveVertexBy(vrtxUID, shiftPos)
 
     def boundedMoveShape(self, shape, pos):
         if self.outOfPixmap(pos):
@@ -542,12 +531,11 @@ class Canvas(QWidget):
 
     def recalculateMovedLatlonPointsSelectedShape(self):
         if self.selectedShape:
-            self.selectedShape.latlonPoints = []
-            for pt in self.selectedShape.points:
-                # latlonPt = self.transformToLatLon(pt, outputQPointF=True)
-                posLon, posLat = self.parent.basemaphelper.xy2latlon(pt.x(), pt.y())
+            self.selectedShape.latlonPoints = {}
+            for uid,pt in self.selectedShape.points.items():
+                posLon, posLat = self.parent.basemaphelper.xy2latlon(pt.qtpoint.x(), pt.qtpoint.y())
                 qptLatLon = QPointF(posLon, posLat)
-                self.selectedShape.latlonPoints.append(qptLatLon)
+                self.selectedShape.addLatLonPoint(qptLatLon)
 
 
     def offsetToCenter(self):
@@ -563,9 +551,9 @@ class Canvas(QWidget):
         w, h = self.pixmap.width(), self.pixmap.height()
         return not (0 <= p.x() <= w and 0 <= p.y() <= h)
 
-    def finalise(self):
+    def finalizeShape(self):
         assert self.currentShape
-        if self.currentShape.points[0] == self.currentShape.points[-1]:
+        if self.currentShape.points[self.currentShape.points_uids[0]] == self.currentShape.points[self.currentShape.points_uids[-1]]:
             self.currentShape = None
             self.drawingPolygon.emit(False)
             self.update()
@@ -670,7 +658,7 @@ class Canvas(QWidget):
             self.drawingPolygon.emit(False)
             self.update()
         elif key == Qt.Key_Return and self.canCloseShape():
-            self.finalise()
+            self.finalizeShape()
         elif key == Qt.Key_Left and self.selectedShape:
             self.moveOnePixel('Left')
         elif key == Qt.Key_Right and self.selectedShape:
@@ -682,17 +670,17 @@ class Canvas(QWidget):
 
     def moveOnePixel(self, direction):
         if direction == 'Left' and not self.moveOutOfBound(QPointF(-1.0, 0)):
-            for i in range(self.shapes_points_count):
-                self.selectedShape.points[i] += QPointF(-1.0, 0)
+            for uid in self.selectedShape.points_uids:
+                self.selectedShape.points[uid] += QPointF(-1.0, 0)
         elif direction == 'Right' and not self.moveOutOfBound(QPointF(1.0, 0)):
-            for i in range(self.shapes_points_count):
-                self.selectedShape.points[i] += QPointF(1.0, 0)
+            for uid in self.selectedShape.points_uids:
+                self.selectedShape.points[uid] += QPointF(1.0, 0)
         elif direction == 'Up' and not self.moveOutOfBound(QPointF(0, -1.0)):
-            for i in range(self.shapes_points_count):
-                self.selectedShape.points[i] += QPointF(0, -1.0)
+            for uid in self.selectedShape.points_uids:
+                self.selectedShape.points[uid] += QPointF(0, -1.0)
         elif direction == 'Down' and not self.moveOutOfBound(QPointF(0, 1.0)):
-            for i in range(self.shapes_points_count):
-                self.selectedShape.points[i] += QPointF(0, 1.0)
+            for uid in self.selectedShape.points_uids:
+                self.selectedShape.points[uid] += QPointF(0, 1.0)
 
         self.recalculateMovedLatlonPointsSelectedShape()
 
@@ -700,7 +688,7 @@ class Canvas(QWidget):
         self.repaint()
 
     def moveOutOfBound(self, step):
-        points = [p1+p2 for p1, p2 in zip(self.selectedShape.points, [step]*4)]
+        points = [self.selectedShape.points[uid]+p2 for uid, p2 in zip(self.selectedShape.points_uids, [step]*4)]
         self.recalculateMovedLatlonPointsSelectedShape()
         return True in map(self.outOfPixmap, points)
 

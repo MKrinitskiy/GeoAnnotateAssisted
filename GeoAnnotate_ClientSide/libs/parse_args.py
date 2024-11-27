@@ -36,6 +36,9 @@ def parse_args(args):
 
     parser.add_argument('--server', '-s', dest='remotehost', type=str, default='localhost',
                         help='''Server host address (ip or domain name, default is "localhost").''')
+    
+    parser.add_argument('--debug-local', '-u', dest='debug_local', action='store_true',
+                        help='''The switch rules whether the app should run in debug mode (i.e. without connecting to the server).''')
 
     return preprocess_args(parser.parse_args(args))
 

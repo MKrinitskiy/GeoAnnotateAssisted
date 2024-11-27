@@ -356,57 +356,67 @@ class TrackingBasemapHelperClass:
     def SwitchSourceData(self, uuid):
         self.dataSourceUUID = uuid
 
-        url1 = 'http://%s:%d/exec?command=SwitchSourceData&uuid=%s&webapi_client_id=%s' % (self.remotehost, self.app_args.port, uuid, self.webapi_client_id)
-        url2 = 'http://%s:%d/images?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
-        try:
-            req1 = requests.get(url1, stream=True)
-            if self.app_args.http_logging:
-                self.logger.info(url1)
-        except Exception as ex:
-            self.logger.error('Request failed. Please check the connection.')
-            ReportException('./logs/error.log', ex)
-            raise RequestFailedException()
+        if ((not DoesPathExistAndIsFile('./comm_debug/debug_local_data.pkl')) or (not self.app_args.debug_local)):
+            url1 = 'http://%s:%d/exec?command=SwitchSourceData&uuid=%s&webapi_client_id=%s' % (self.remotehost, self.app_args.port, uuid, self.webapi_client_id)
+            url2 = 'http://%s:%d/images?webapi_client_id=%s' % (self.remotehost, self.app_args.port, self.webapi_client_id)
+            try:
+                req1 = requests.get(url1, stream=True)
+                if self.app_args.http_logging:
+                    self.logger.info(url1)
+            except Exception as ex:
+                self.logger.error('Request failed. Please check the connection.')
+                ReportException('./logs/error.log', ex)
+                raise RequestFailedException()
 
-        self.logger.info(req1.headers)
-        ctype = req1.headers['Content-Type']
-        m = re.match(r'.+charset=(.+)', ctype)
-        enc = 'utf-8'
-        if m is not None:
-            enc = m.groups()[0]
-            self.logger.info('encoding detected: %s' % enc)
-        self.logger.info(req1.status_code)
+            self.logger.info(req1.headers)
+            ctype = req1.headers['Content-Type']
+            m = re.match(r'.+charset=(.+)', ctype)
+            enc = 'utf-8'
+            if m is not None:
+                enc = m.groups()[0]
+                self.logger.info('encoding detected: %s' % enc)
+            self.logger.info(req1.status_code)
 
-        for line in streamlines_gen(req1):
-            print(line)
-            if line == 'READY':
-                self.logger.info('got READY response')
-                self.logger.info('requesting image')
+            for line in streamlines_gen(req1):
+                print(line)
+                if line == 'READY':
+                    self.logger.info('got READY response')
+                    self.logger.info('requesting image')
 
-                try:
-                    req2 = requests.get(url2)
-                    if self.app_args.http_logging:
-                        self.logger.info(url2)
-                except Exception as ex:
-                    self.logger.error('Request failed. Please check the connection.')
-                    ReportException('./logs/error.log', ex)
-                    raise RequestFailedException()
-                self.logger.info(req2.status_code)
-                self.logger.info(req2.headers)
+                    try:
+                        req2 = requests.get(url2)
+                        if self.app_args.http_logging:
+                            self.logger.info(url2)
+                    except Exception as ex:
+                        self.logger.error('Request failed. Please check the connection.')
+                        ReportException('./logs/error.log', ex)
+                        raise RequestFailedException()
+                    self.logger.info(req2.status_code)
+                    self.logger.info(req2.headers)
 
-                rec_dict = None
-                with BytesIO() as bytesf:
-                    bytesf.write(req2.content)
-                    bytesf.seek(0)
-                    rec_dict = pickle.load(bytesf)
+                    rec_dict = None
+                    with BytesIO() as bytesf:
+                        bytesf.write(req2.content)
+                        bytesf.seek(0)
+                        rec_dict = pickle.load(bytesf)
 
-                if self.app_args.comm_debug:
-                    with open('./comm_debug/%s.pickle' % uuid, 'wb') as f:
-                        f.write(req2.content)
+                    if self.app_args.comm_debug:
+                        with open('./comm_debug/%s.pickle' % uuid, 'wb') as f:
+                            f.write(req2.content)
 
-                if rec_dict is not None:
-                    self.deflate_recieved_dict(rec_dict)
-                else:
-                    raise Exception('Generated images transfer failed.')
+                    if rec_dict is not None:
+                        if self.app_args.comm_debug:
+                            with open('./comm_debug/debug_local_data.pkl', 'wb') as f:
+                                pickle.dump(rec_dict, f)
+                        self.deflate_recieved_dict(rec_dict)
+                    else:
+                        raise Exception('Generated images transfer failed.')
+        else:
+            self.logger.info('Debug mode is on. Not requesting data from the server.')
+            with open('./comm_debug/debug_local_data.pkl', 'rb') as f:
+                rec_dict = pickle.load(f)
+                self.deflate_recieved_dict(rec_dict)
+
 
 
 

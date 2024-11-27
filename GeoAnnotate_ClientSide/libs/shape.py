@@ -22,6 +22,49 @@ MIN_Y_LABEL = 10
 
 shape_types = enum(['ellipse', 'circle', 'qllabel'])
 
+
+class PointType(enum(['BasicPoint', 'AuxiliaryPoint'])):
+    pass
+
+
+class ShapePoint(object):
+    def __init__(self,
+                 pt: QPointF,
+                 pointtype: PointType = PointType.BasicPoint,
+                 basicpoint: "ShapePoint" = None):
+        self.uid = str(uuid.uuid4())
+        self.qtpoint = pt
+        self.pointtype = pointtype
+        if pointtype == PointType.BasicPoint:
+            self.basicpointuid = None
+        else:
+            self.basicpointuid = basicpoint.uid
+    
+    def __init__(self,
+                 pt: QPointF,
+                 pointtype: PointType = PointType.BasicPoint,
+                 basicpointuid: str = None):
+        self.uid = str(uuid.uuid4())
+        self.qtpoint = pt
+        self.pointtype = pointtype
+        if pointtype == PointType.BasicPoint:
+            self.basicpointuid = None
+        else:
+            self.basicpointuid = basicpointuid
+
+    def copy(self):
+        return ShapePoint(self.qtpoint, self.pointtype, self.basicpointuid)
+
+    def __add__(self, other: QPointF):
+        return ShapePoint(self.qtpoint + other, self.pointtype, self.basicpointuid)
+    
+    def __sub__(self, other: QPointF):
+        return ShapePoint(self.qtpoint - other, self.pointtype, self.basicpointuid)
+    
+    def __str__(self):
+        return f'ShapePoint: {self.uid}, {self.qtpoint}, {self.pointtype}, {self.basicpointuid}'
+
+
 class Shape(object):
     P_SQUARE, P_ROUND = range(2)
 
@@ -79,11 +122,13 @@ class Shape(object):
         elif (self.label_type == 'QLL'):
             self.shape_type = shape_types.qllabel
 
-        self.points = []
-        self.latlonPoints = []
-        if self.shape_type == shape_types.qllabel:
-            self.widthkeypoints = []
-            self.latlonWidthkeypoints = []
+        self.points = {}
+        self.points_uids = []
+
+
+        self.latlonPoints = {}
+        self.latlonPoints_uids = []
+
         self.selected = False
         self.paintLabel = paintLabel
         self.fill = False
@@ -105,15 +150,9 @@ class Shape(object):
         elif self.parent_canvas.parent.label_types == 'QLL':
             self.shapes_points_count = None
 
-        self._highlightIndex = None
+        self._highlightUID = None
         self._highlightMode = self.NEAR_VERTEX
         self._highlightSettings = {
-            self.NEAR_VERTEX: (4, self.P_ROUND),
-            self.MOVE_VERTEX: (1.5, self.P_SQUARE),
-        }
-        self._highlightWidthIndex = None
-        self._highlightWidthMode = self.NEAR_VERTEX
-        self._highlightWidthSettings = {
             self.NEAR_VERTEX: (4, self.P_ROUND),
             self.MOVE_VERTEX: (1.5, self.P_SQUARE),
         }
@@ -130,37 +169,40 @@ class Shape(object):
             return True
         return False
 
-    def addPoint(self, point, latlonPoint):
+    def addPoint(self, point: QPointF, latlonPoint: QPointF):
         self.parent_canvas.logger.info(f'addPoint: {point}, {latlonPoint}')
         if not self.reachMaxPoints():
-            self.points.append(point)
-            self.latlonPoints.append(latlonPoint)
+            shpt = ShapePoint(point)
+            self.points[shpt.uid] = shpt
+            self.points_uids.append(shpt.uid)
+            self.addLatLonPoint(latlonPoint)
     
-    def addQLLpoint(self, point, latlonPoint, widthkeypoint, latlonWidthKeyPoint):
-        self.parent_canvas.logger.info(f'addQLLpoint: {point}, {latlonPoint}, {widthkeypoint}, {latlonWidthKeyPoint}')
+    def addLatLonPoint(self, latlonPoint: QPointF):
+        self.parent_canvas.logger.info(f'addLatLonPoint: {latlonPoint}')
+        llnpt = ShapePoint(latlonPoint)
+        self.latlonPoints[llnpt.uid] = llnpt
+        self.latlonPoints_uids.append(llnpt.uid)
+    
+    def addQLLpoint(self,
+                     point: QPointF,
+                     latlonPoint: QPointF,
+                     auxiliarypoint: QPointF,
+                     latlonAuxiliaryPoint: QPointF):
+        self.parent_canvas.logger.info(f'addQLLpoint: {point}, {latlonPoint}, {auxiliarypoint}, {latlonAuxiliaryPoint}')
         if not self.reachMaxPoints():
-            self.points.append(point)
-            self.latlonPoints.append(latlonPoint)
-            self.widthkeypoints.append(widthkeypoint)
-            self.latlonWidthkeypoints.append(latlonWidthKeyPoint)
+            pt = ShapePoint(point)
+            self.parent_canvas.logger.info(f'adding point: {pt}')
+            self.points[pt.uid] = pt
+            self.points_uids.append(pt.uid)
+            self.parent_canvas.logger.info(f'added point: {pt}')
+            self.addLatLonPoint(latlonPoint)
+            auxpt = ShapePoint(auxiliarypoint, PointType.AuxiliaryPoint, pt.uid)
+            self.parent_canvas.logger.info(f'adding auxiliary point: {auxpt}')
+            self.points[auxpt.uid] = auxpt
+            self.points_uids.append(auxpt.uid)
+            self.parent_canvas.logger.info(f'added auxiliary point: {auxpt}')
+            self.addLatLonPoint(latlonAuxiliaryPoint)
 
-    def popPoint(self, latlon = False):
-        if self.shape_type == shape_types.qllabel:
-            if latlon:
-                pt = self.latlonPoints.pop()
-                wkp = self.latlonWidthkeypoints.pop()
-            else:
-                pt = self.points.pop()
-                wkp = self.widthkeypoints.pop()
-            return pt, wkp
-        else:
-            self.parent_canvas.logger.info(f'popPoint: {latlon}')
-            if self.points:
-                if latlon:
-                    return self.latlonPoints.pop()
-                else:
-                    return self.points.pop()
-        return None
 
     def isClosed(self):
         return self._closed
@@ -192,12 +234,15 @@ class Shape(object):
                 width_path = QPainterPath()
 
                 line_path = QPainterPath()
-                line_path.moveTo(self.points[0])
-                for i, p in enumerate(self.points):
-                    line_path.lineTo(p)
-                    self.drawVertex(vrtx_path, i)
-                for i, p in enumerate(self.widthkeypoints):
-                    self.drawWidthCircle(width_path, vrtx_path, i)
+                line_path.moveTo(self.points[self.points_uids[0]].qtpoint)
+                basic_points_uids = [uid for uid in self.points_uids if self.points[uid].pointtype == PointType.BasicPoint]
+                for ptuid in basic_points_uids[1:]:
+                    line_path.lineTo(self.points[ptuid].qtpoint)
+                    self.drawVertex(vrtx_path, self.points[ptuid])
+                    try:
+                        self.drawWidthCircle(width_path, vrtx_path, self.points[ptuid])
+                    except:
+                        self.parent_canvas.logger.error(f'drawWidthCircle: {self.points[ptuid]}')
                 
                 self._painter.drawPath(line_path)
                 self._painter.drawPath(width_path)
@@ -208,11 +253,11 @@ class Shape(object):
 
             elif (self.shapes_points_count == len(self.points)):
                 if self.shapes_points_count == 2:
-                    x0 = self.points[0].x()
-                    x1 = self.points[1].x()
+                    x0 = self.points[self.points_uids[0]].qtpoint.x()
+                    x1 = self.points[self.points_uids[1]].qtpoint.x()
                     xc = 0.5 * (x0 + x1)
-                    y0 = self.points[0].y()
-                    y1 = self.points[1].y()
+                    y0 = self.points[self.points_uids[0]].qtpoint.y()
+                    y1 = self.points[self.points_uids[1]].qtpoint.y()
                     yc = 0.5 * (y0 + y1)
                     dx = x1 - x0
                     dy = y1 - y0
@@ -221,13 +266,13 @@ class Shape(object):
 
                     line_path = QPainterPath()
                     vrtx_path = QPainterPath()
-                    line_path.moveTo(self.points[0])
-
-                    for i, p in enumerate(self.points):
-                        line_path.lineTo(p)
-                        self.drawVertex(vrtx_path, i)
+                    line_path.moveTo(self.points[self.points_uids[0]].qtpoint)
+                    basic_points_uids = [uid for uid in self.points_uids if self.points[uid].pointtype == PointType.BasicPoint]
+                    for ptuid in basic_points_uids[1:]:
+                        line_path.lineTo(self.points[ptuid].qtpoint)
+                        self.drawVertex(vrtx_path, self.points[ptuid])
                     if self.isClosed():
-                        line_path.lineTo(self.points[0])
+                        line_path.lineTo(self.points[self.points_uids[0]].qtpoint)
                     self._painter.drawPath(line_path)
                     self._painter.drawPath(vrtx_path)
                     self._painter.fillPath(vrtx_path, self.vertex_fill_color)
@@ -236,11 +281,11 @@ class Shape(object):
                     self._painter.translate(xc, yc)
                     self._painter.drawEllipse(square)
                 elif self.shapes_points_count == 3:
-                    x0 = self.points[0].x()
-                    x1 = self.points[1].x()
+                    x0 = self.points[self.points_uids[0]].qtpoint.x()
+                    x1 = self.points[self.points_uids[1]].qtpoint.x()
                     xc = 0.5 * (x0 + x1)
-                    y0 = self.points[0].y()
-                    y1 = self.points[1].y()
+                    y0 = self.points[self.points_uids[0]].qtpoint.y()
+                    y1 = self.points[self.points_uids[1]].qtpoint.y()
                     yc = 0.5 * (y0 + y1)
                     dx = x1 - x0
                     dy = y1 - y0
@@ -257,8 +302,8 @@ class Shape(object):
                     x_diameter = np.sqrt(dx * dx + dy * dy)
                     a = x_diameter * 0.5
 
-                    x2_centered = self.points[2].x() - xc
-                    y2_centered = self.points[2].y() - yc
+                    x2_centered = self.points[self.points_uids[2]].qtpoint.x() - xc
+                    y2_centered = self.points[self.points_uids[2]].qtpoint.y() - yc
                     coords2_centered = np.asarray([[x2_centered], [y2_centered]])
                     rotation_matrix = np.asarray(
                         [[np.cos(alpha_rad), np.sin(alpha_rad)], [-np.sin(alpha_rad), np.cos(alpha_rad)]])
@@ -275,13 +320,13 @@ class Shape(object):
 
                     line_path = QPainterPath()
                     vrtx_path = QPainterPath()
-                    line_path.moveTo(self.points[0])
-
-                    for i, p in enumerate(self.points):
-                        line_path.lineTo(p)
-                        self.drawVertex(vrtx_path, i)
+                    line_path.moveTo(self.points[self.points_uids[0]].qtpoint)
+                    basic_points_uids = [uid for uid in self.points_uids if self.points[uid].pointtype == PointType.BasicPoint]
+                    for ptuid in basic_points_uids[1:]:
+                        line_path.lineTo(self.points[ptuid].qtpoint)
+                        self.drawVertex(vrtx_path, self.points[ptuid])
                     if self.isClosed():
-                        line_path.lineTo(self.points[0])
+                        line_path.lineTo(self.points[self.points_uids[0]].qtpoint)
                     self._painter.drawPath(line_path)
                     self._painter.drawPath(vrtx_path)
                     self._painter.fillPath(vrtx_path, self.vertex_fill_color)
@@ -295,93 +340,90 @@ class Shape(object):
             self._painter.end()
 
 
-    def drawVertex(self, path, i):
+    def drawVertex(self, path, shpt: ShapePoint):
         d = self.point_size / self.scale
 
         # TODO: perhaps convert latlonPoints to points in order to draw
 
-        point = self.points[i]
-        if i == self._highlightIndex:
+        point = shpt
+        if shpt.uid == self._highlightUID:
             size, shape = self._highlightSettings[self._highlightMode]
             d *= size
         
-        if self._highlightIndex is not None:
+        if self._highlightUID is not None:
             self.vertex_fill_color = self.hvertex_fill_color
         else:
             self.vertex_fill_color = Shape.vertex_fill_color
 
         if self.point_type == self.P_SQUARE:
-            path.addRect(point.x() - d / 2, point.y() - d / 2, d, d)
+            path.addRect(point.qtpoint.x() - d / 2, point.qtpoint.y() - d / 2, d, d)
         elif self.point_type == self.P_ROUND:
-            path.addEllipse(point, d / 2.0, d / 2.0)
+            path.addEllipse(point.qtpoint, d / 2.0, d / 2.0)
         else:
             assert False, "unsupported vertex shape"
     
 
-    def drawWidthVertex(self, path, i):
+    def drawAuxiliaryVertex(self, path, shpt: ShapePoint):
         d = self.point_size / self.scale
-        if i == self._highlightIndex:
+        if shpt.uid == self._highlightUID:
             size, shape = self._highlightSettings[self._highlightMode]
             d *= size
         
-        widthkeypoint = self.widthkeypoints[i]
-        path.addEllipse(widthkeypoint, d / 2.0, d / 2.0)
+        try:
+            path.addEllipse(shpt.qtpoint, d / 2.0, d / 2.0)
+        except:
+            pass
 
 
-    def drawWidthCircle(self, width_path, vrtx_path, i):
+    def drawWidthCircle(self, width_path, vrtx_path, shpt: ShapePoint):
         # TODO: perhaps convert latlonPoints to points in order to draw
         # 
         
-        self.drawWidthVertex(vrtx_path, i)
+        point = shpt
+        auxpt = [pt for pt in self.points if (pt.pointtype == PointType.AuxiliaryPoint) and (pt.basicpointuid == shpt.uid)][0]
+        self.drawAuxiliaryVertex(vrtx_path, auxpt)
+        
+        try:
+            x0 = point.qtpoint.x()
+            x1 = auxpt.qtpoint.x()
+            y0 = point.qtpoint.y()
+            y1 = auxpt.qtpoint.y()
+            dx = x1 - x0
+            dy = y1 - y0
+            r = np.sqrt(dx * dx + dy * dy)
 
-        point = self.points[i]
-        widthkeypoint = self.widthkeypoints[i]
-        x0 = point.x()
-        x1 = widthkeypoint.x()
-        y0 = point.y()
-        y1 = widthkeypoint.y()
-        dx = x1 - x0
-        dy = y1 - y0
-        r = np.sqrt(dx * dx + dy * dy)
-
-        width_path.addEllipse(point, r, r)
+            width_path.addEllipse(QPointF(x0, y0), r, r)
+        except:
+            pass
 
         
-    def nearestVertex(self, point, epsilon):
+    def nearestVertex(self, point, epsilon) -> str:
 
         # TODO: perhaps convert latlonPoints to points
 
-        for i, p in enumerate(self.points):
-            if distance(p - point) <= epsilon:
-                return i
+        for ptuid in self.points_uids:
+            if distance(self.points[ptuid].qtpoint - point) <= epsilon:
+                return self.points[ptuid].uid
         return None
     
-    def nearestWidthVertex(self, point, epsilon):
-
-        # TODO: perhaps convert latlonPoints to points
-
-        for i, p in enumerate(self.widthkeypoints):
-            if distance(p - point) <= epsilon:
-                return i
-        return None
-
+    
 
     def containsPoint(self, point):
         if self.shape_type == shape_types.ellipse:
             return self.makePath().contains(point)
         elif self.shape_type == shape_types.circle:
-            x0 = self.points[0].x()
-            x1 = self.points[1].x()
+            x0 = self.points[self.points_uids[0]].qtpoint.x()
+            x1 = self.points[self.points_uids[1]].qtpoint.x()
             xc = 0.5 * (x0 + x1)
-            y0 = self.points[0].y()
-            y1 = self.points[1].y()
+            y0 = self.points[self.points_uids[0]].qtpoint.y()
+            y1 = self.points[self.points_uids[1]].qtpoint.y()
             yc = 0.5 * (y0 + y1)
             dx = x1 - x0
             dy = y1 - y0
             diameter = np.sqrt(dx * dx + dy * dy)
             r = diameter * 0.5
 
-            return ((point.x() - xc)**2 + (point.y() - yc)**2) <= r**2
+            return ((point.qtpoint.x() - xc)**2 + (point.qtpoint.y() - yc)**2) <= r**2
 
     def makePath(self):
         path = QPainterPath(self.points[0])
@@ -392,30 +434,30 @@ class Shape(object):
     def boundingRect(self):
         return self.makePath().boundingRect()
 
-    def moveBy(self, offset):
-        self.points = [p + offset for p in self.points]
+    def moveBy(self, offset: QPointF):
+        self.points = [self.points[uid] + offset for uid in self.points_uids]
 
-    def moveVertexBy(self, i, offset):
-        self.points[i] = self.points[i] + offset
+    def moveVertexBy(self, uid: str, offset: QPointF):
+        
+        self.points[uid] = self.points[uid] + offset
+        if self.points[uid].pointtype == PointType.BasicPoint:
+            try:
+                auxpt = [pt for auxuid,pt in self.points.items() if (pt.pointtype == PointType.AuxiliaryPoint) and (pt.basicpointuid == uid)][0]
+                auxpt = auxpt + offset
+            except:
+                pass
 
-    def highlightVertex(self, i, action):
-        self._highlightIndex = i
+    def highlightVertex(self, uid: str, action):
+        self._highlightUID = uid
         self._highlightMode = action
-    
-    def highlightWidthVertex(self, i, action):
-        self._highlightWidthIndex = i
-        self._highlightWidthMode = action
 
     def highlightClear(self):
-        self._highlightIndex = None
-        self._highlightWidthIndex = None
+        self._highlightUID = None
 
     def copy(self):
         shape = Shape(self.label, parent_canvas=self.parent_canvas)
-        shape.points = [p for p in self.points]
-        shape.latlonPoints = [p for p in self.latlonPoints]
-        shape.widthkeypoints = [p for p in self.widthkeypoints]
-        shape.latlonWidthkeypoints = [p for p in self.latlonWidthkeypoints]
+        shape.points = [p.copy() for p in self.points] # TODO: it is incorrect since uids are copied yet they should be unique
+        shape.latlonPoints = [p.copy() for p in self.latlonPoints] # TODO: it is incorrect since uids are copied yet they should be unique
         shape.fill = self.fill
         shape.selected = self.selected
         shape._closed = self._closed
@@ -428,10 +470,11 @@ class Shape(object):
         return shape
 
     def __len__(self):
-        return len(self.points)
+        return len([pt for uid,pt in self.points.items() if pt.pointtype == PointType.BasicPoint])
 
     def __getitem__(self, key):
         return self.points[key]
+        
 
     def __setitem__(self, key, value):
         self.points[key] = value
